@@ -1,5 +1,5 @@
 use crate::geometry::Vertex;
-use crate::render::tier_1::render_pixel;
+use crate::render::color::render_pixel;
 use crate::render::{RenderState, ThreadState};
 use std::f64::consts::PI;
 use std::rc::Rc;

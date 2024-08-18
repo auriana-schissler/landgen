@@ -12,7 +12,7 @@ use std::thread;
 use chrono::Utc;
 
 mod altitude;
-pub mod tier_1;
+pub mod color;
 
 #[derive(Clone)]
 pub struct RenderOptions {
@@ -253,8 +253,8 @@ pub struct ThreadState {
     pub heightfield: Box<Vec2D<i32>>,
     pub shading: Box<Vec2D<u8>>,
     pub search_map: [[i32; 30]; 60],
-    pub base_tetra: Rc<Tetra>,
-    pub cached_tetra: Rc<Tetra>,
+    pub base_tetra: Tetra,
+    pub cached_tetra: Tetra,
     pub starting_subdivision_depth: u8,
     pub rain_shadow: f64,
     pub shade: i32,
@@ -276,8 +276,8 @@ impl ThreadState {
             heightfield: gen_heightfield(id, &options),
             shading: gen_shading(id, &options),
             search_map: [[0; 30]; 60],
-            base_tetra: Rc::new(create_base_tetra(&options)),
-            cached_tetra: Rc::new(create_base_tetra(&options)),
+            base_tetra: create_base_tetra(&options),
+            cached_tetra: create_base_tetra(&options),
             starting_subdivision_depth,
             rain_shadow: 0.0,
             shade: 0,

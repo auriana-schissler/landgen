@@ -2,6 +2,7 @@ use crate::geometry::{side_check, Tetra, Vertex};
 use crate::math::{distance_squared, rand_low};
 use crate::render::ThreadState;
 use std::f64::consts::PI;
+use std::mem;
 use std::rc::Rc;
 
 // planet1()
@@ -9,14 +10,14 @@ pub fn calc_altitude(state: &mut ThreadState, p: &Vertex) -> f64 {
     if p.exists_within(&state.cached_tetra) {
         execute(
             state,
-            state.cached_tetra.clone(),
+            &mut state.cached_tetra.clone(),
             p,
             state.starting_subdivision_depth - 5,
         )
     } else {
         execute(
             state,
-            state.base_tetra.clone(),
+            &mut state.base_tetra.clone(),
             p,
             state.starting_subdivision_depth,
         )
@@ -26,7 +27,7 @@ pub fn calc_altitude(state: &mut ThreadState, p: &Vertex) -> f64 {
 // planet()
 pub fn execute(
     state: &mut ThreadState,
-    tetra: Rc<Tetra>,
+    tetra: &mut Tetra,
     p: &Vertex,
     subdivision_depth: u8,
 ) -> f64 {
@@ -73,46 +74,35 @@ pub fn execute(
         }
 
         if (1..=5_u8).contains(&max) {
-            let tetra = Rc::new(match max {
-                1 => Tetra::with_points(
-                    tetra.a.clone(),
-                    tetra.c.clone(),
-                    tetra.b.clone(),
-                    tetra.d.clone(),
-                ),
-                2 => Tetra::with_points(
-                    tetra.a.clone(),
-                    tetra.d.clone(),
-                    tetra.b.clone(),
-                    tetra.c.clone(),
-                ),
-                3 => Tetra::with_points(
-                    tetra.b.clone(),
-                    tetra.c.clone(),
-                    tetra.a.clone(),
-                    tetra.d.clone(),
-                ),
-                4 => Tetra::with_points(
-                    tetra.b.clone(),
-                    tetra.d.clone(),
-                    tetra.a.clone(),
-                    tetra.c.clone(),
-                ),
-                5 => Tetra::with_points(
-                    tetra.c.clone(),
-                    tetra.d.clone(),
-                    tetra.a.clone(),
-                    tetra.b.clone(),
-                ),
+            match max {
+                1 => {  // a c b d             
+                    mem::swap(&mut tetra.b, &mut tetra.c);
+                },
+                2 => {  // a d b c
+                    mem::swap(&mut tetra.b, &mut tetra.d);
+                    mem::swap(&mut tetra.c, &mut tetra.d);
+                }
+                3 => { // b c a d
+                    mem::swap(&mut tetra.a, &mut tetra.c);
+                    mem::swap(&mut tetra.b, &mut tetra.c);
+                }
+                4 => {  // b d a c
+                    mem::swap(&mut tetra.a, &mut tetra.c);
+                    mem::swap(&mut tetra.a, &mut tetra.d);
+                    mem::swap(&mut tetra.a, &mut tetra.b);
+                }
+                5 => {  // c d a b
+                    mem::swap(&mut tetra.a, &mut tetra.c);
+                    mem::swap(&mut tetra.b, &mut tetra.d);
+                }
                 _ => {
                     unreachable!()
                 }
-            });
-            return execute(state, tetra.clone(), p, subdivision_depth);
+            }
+            return execute(state, tetra, p, subdivision_depth);
         }
 
         if subdivision_depth == state.starting_subdivision_depth - 5
-            && !Rc::ptr_eq(&state.cached_tetra, &tetra)
         {
             state.cached_tetra = tetra.clone();
         }
@@ -198,21 +188,16 @@ pub fn execute(
 
         if side_check(&ea, &ec, &ed, &ep) {
             // point is inside acde
-            let tetra = Rc::new(Tetra::with_points(
-                tetra.c.clone(),
-                tetra.d.clone(),
-                tetra.a.clone(),
-                e,
-            ));
+                mem::swap(&mut tetra.a, &mut tetra.c);
+                mem::swap(&mut tetra.b, &mut tetra.d);
+                tetra.d = e;
             execute(state, tetra, p, subdivision_depth - 1)
         } else {
             // point is inside bcde
-            let tetra = Rc::new(Tetra::with_points(
-                tetra.c.clone(),
-                tetra.d.clone(),
-                tetra.b.clone(),
-                e,
-            ));
+            mem::swap(&mut tetra.a, &mut tetra.c);
+            mem::swap(&mut tetra.b, &mut tetra.d);
+            mem::swap(&mut tetra.c, &mut tetra.d);
+            tetra.d = e;
             execute(state, tetra, p, subdivision_depth - 1)
         }
     } else {
@@ -221,11 +206,11 @@ pub fn execute(
             1 | 2 => {
                 /* bump map */
                 x1 = 0.25 * (tetra.a.x + tetra.b.x + tetra.c.x + tetra.d.x);
-                x1 = calc_bump_point(tetra.clone(), x1);
+                x1 = calc_bump_point(tetra, x1);
                 y1 = 0.25 * (tetra.a.y + tetra.b.y + tetra.c.y + tetra.d.y);
-                y1 = calc_bump_point(tetra.clone(), y1);
+                y1 = calc_bump_point(tetra, y1);
                 z1 = 0.25 * (tetra.a.z + tetra.b.z + tetra.c.z + tetra.d.z);
-                z1 = calc_bump_point(tetra.clone(), z1);
+                z1 = calc_bump_point(tetra, z1);
                 l1 = (x1 * x1 + y1 * y1 + z1 * z1).sqrt();
                 if l1 == 0.0 {
                     l1 = 1.0;
@@ -261,11 +246,11 @@ pub fn execute(
                 } else {
                     /* add bumpmap effect */
                     x1 = 0.25 * (tetra.a.x + tetra.b.x + tetra.c.x + tetra.d.x);
-                    x1 = calc_bump_point(tetra.clone(), x1);
+                    x1 = calc_bump_point(tetra, x1);
                     y1 = 0.25 * (tetra.a.y + tetra.b.y + tetra.c.y + tetra.d.y);
-                    y1 = calc_bump_point(tetra.clone(), y1);
+                    y1 = calc_bump_point(tetra, y1);
                     z1 = 0.25 * (tetra.a.z + tetra.b.z + tetra.c.z + tetra.d.z);
-                    z1 = calc_bump_point(tetra.clone(), z1);
+                    z1 = calc_bump_point(tetra, z1);
                     l1 = 5.0 * (x1 * x1 + y1 * y1 + z1 * z1).sqrt();
                     x1 += p.x * l1;
                     y1 += p.y * l1;
@@ -295,7 +280,7 @@ pub fn execute(
 }
 
 #[inline(always)]
-fn calc_bump_point(t: Rc<Tetra>, p: f64) -> f64 {
+fn calc_bump_point(t: &Tetra, p: f64) -> f64 {
     t.a.altitude * (p - t.a.x)
         + t.b.altitude * (p - t.b.x)
         + t.c.altitude * (p - t.c.x)
