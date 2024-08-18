@@ -1,0 +1,12 @@
+0 0 0 0             # usually black
+1 255 255 255       # usually white
+
+2 255 255 255       # background
+3 0 0 0             # lat/long grid lines
+4 0 0 0             # outlines and contour lines
+5 0 0 0           # outlines and contour lines
+
+6 0 0 0             # altitude map from here and beyond
+7 0 0 0             #
+8 255 255 255       #
+9 255 255 255       #
