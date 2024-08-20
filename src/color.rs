@@ -17,6 +17,8 @@ pub struct ColorTable {
     pub sea_level: u16,
     pub lowest_land: u16,
     pub highest_land: u16,
+    pub sea_depth: u16,
+    pub land_height: u16,
 }
 
 impl ColorTable {
@@ -33,6 +35,8 @@ impl ColorTable {
             sea_level: 7,
             lowest_land: 8,
             highest_land: 9,
+            sea_depth: 0,
+            land_height: 0
         }
     }
 
@@ -245,6 +249,8 @@ fn generate_color_data(filename: &str) -> ColorTable {
     table.sea_level = sea_level as u16;
     table.lowest_land = lowest_land as u16;
 
+    table.sea_depth = table.sea_level - table.sea_bottom;
+    table.land_height = table.highest_land - table.lowest_land;
     table
 }
 

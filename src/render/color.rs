@@ -5,12 +5,7 @@ use crate::render::ThreadState;
 use crate::terrain::biomes;
 
 // planet0()
-pub fn render_pixel(
-    thread_state: &mut ThreadState,
-    p: &Vertex,
-    w: usize,
-    h: usize,
-) {
+pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usize) {
     let options = thread_state.options.clone();
     let mut alt: f64 = calc_altitude(thread_state, p);
 
@@ -57,19 +52,15 @@ pub fn render_pixel(
     let mut color: u16;
 
     let color_table = &thread_state.color_table;
-    
+
     if options.show_biomes {
         let tt = ((rain * 300.0 - 9.0) as i32).clamp(0, 44) as u8;
         let rr = ((temp * 300.0 + 10.0) as i32).clamp(0, 44) as u8;
         let bio = biomes[tt as usize][rr as usize] as u16;
         if alt <= 0.0 {
-            let c = ((color_table.sea_level - color_table.sea_bottom + 1)
-                as f64
-                * (10.0 * alt)) as u16;
-            color = color_table.sea_level + c;
-            if color < color_table.sea_bottom {
-                color = color_table.sea_bottom;
-            }
+            let depth_level = (-10. * alt).min(1.);
+            let c = (color_table.sea_depth as f64 * depth_level) as u16;
+            color = color_table.sea_level - c;
         } else {
             color = bio - 64 + color_table.lowest_land; // from LAND+2 to LAND+23
         }
@@ -79,29 +70,20 @@ pub fn render_pixel(
         if options.use_latitude_coloring && (y2 + alt) >= (1.0 - 0.02 * lci * lci) {
             color = color_table.highest_land; // icecap if close to poles
         } else {
-            let c = ((color_table.sea_level - color_table.sea_bottom + 1)
-                as f64
-                * (10.0 * alt)) as u16;
+            let depth_level = (-10. * alt).min(1.);
+            let c = (color_table.sea_depth as f64 * depth_level) as u16;
             color = color_table.sea_level - c;
-            if color < color_table.sea_bottom {
-                color = color_table.sea_bottom;
-            }
         }
     } else {
         if options.use_latitude_coloring {
             alt += 0.1 * options.latitude_color_intensity as f64 * y2; // altitude adjusted with latitude
         }
-        if alt >= 0.1 {
-            // if high then
+        if alt >= 0.1 {     // if high then
             color = color_table.highest_land;
         } else {
-            let c = ((color_table.highest_land - color_table.lowest_land
-                + 1) as f64
-                * (10.0 * alt)) as u16;
-            color = color_table.lowest_land + c;
-            if color > color_table.highest_land {
-                color = color_table.highest_land;
-            }
+            let altitude = (10.0 * alt).min(1.);
+            let c = color_table.land_height as f64 * altitude;
+            color = color_table.lowest_land + c as u16;
         }
     }
 
