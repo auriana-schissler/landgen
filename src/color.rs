@@ -1,9 +1,8 @@
+use crate::render::RenderOptions;
+use crate::util::unwrap_or_return;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::ops::{Index, IndexMut};
-use std::sync::Arc;
-use crate::render::RenderOptions;
-use crate::util::unwrap_or_return;
 
 #[derive(Debug)]
 pub struct ColorTable {
@@ -44,14 +43,24 @@ impl ColorTable {
     pub fn is_monochrome(&self) -> bool {
         for row in &self.rows {
             match row {
-                Color { red: 0, green: 0, blue: 0 } => {}
-                Color { red: 255, green: 255, blue: 255 } => {}
-                _ => { return false; }
+                Color {
+                    red: 0,
+                    green: 0,
+                    blue: 0,
+                } => {}
+                Color {
+                    red: 255,
+                    green: 255,
+                    blue: 255,
+                } => {}
+                _ => {
+                    return false;
+                }
             }
         }
         true
     }
-    
+
     pub fn len(&self) -> usize {
         self.rows.len()
     }
@@ -119,7 +128,7 @@ const E: usize = 'E' as usize - 64;
 const O: usize = 'O' as usize - 64;
 const I: usize = 'I' as usize - 64;
 
-// TODO: use include_str!() to embed color data into the program 
+// TODO: use include_str!() to embed color data into the program
 pub fn build_color_data(options: &RenderOptions) -> ColorTable {
     let mut table = generate_color_data(&options.color_filename);
 
@@ -141,12 +150,17 @@ pub fn build_color_data(options: &RenderOptions) -> ColorTable {
     table
 }
 
-fn get_color_steps(start_index: usize, sc: &Color, end_index: usize, ec: &Color) -> (f64, f64, f64) {
+fn get_color_steps(
+    start_index: usize,
+    sc: &Color,
+    end_index: usize,
+    ec: &Color,
+) -> (f64, f64, f64) {
     let index_diff = end_index - start_index;
     (
         (ec.red as i32 - sc.red as i32) as f64 / index_diff as f64,
         (ec.green as i32 - sc.green as i32) as f64 / index_diff as f64,
-        (ec.blue as i32 - sc.blue as i32) as f64 / index_diff as f64
+        (ec.blue as i32 - sc.blue as i32) as f64 / index_diff as f64,
     )
 }
 
@@ -156,9 +170,20 @@ fn test_color_step_calc() {
     let end = Color::from_colors(255, 255, 255);
     let (red, green, blue) = get_color_steps(0, &start, 255, &end);
 
-    assert_eq!(red, 1.0);
-    assert_eq!(green, 1.0);
-    assert_eq!(blue, 1.0);
+    assert_eq!(red, 1.);
+    assert_eq!(green, 1.);
+    assert_eq!(blue, 1.);
+}
+
+#[test]
+fn test_negative_color_step_calc() {
+    let start = Color::from_colors(238, 170, 34);
+    let end = Color::from_colors(221, 136, 34);
+    let (red, green, blue) = get_color_steps(49, &start, 51, &end);
+
+    assert_eq!(red, -8.5);
+    assert_eq!(green, -17.);
+    assert_eq!(blue, 0.);
 }
 
 // Format of colour file is a sequence of lines
@@ -187,24 +212,24 @@ fn generate_color_data(filename: &str) -> ColorTable {
     let mut table = ColorTable::new(max_index + 1);
     let mut last_good_index = 0;
 
-
     for row in color_rows {
         table[row.index] = row.color;
 
         let index_diff = row.index - last_good_index;
         if index_diff > 1 {
             let start_color = table[last_good_index].clone();
-            let (red_step, green_step, blue_step) =
-                get_color_steps(last_good_index,
-                                &table[last_good_index],
-                                row.index,
-                                &table[row.index]);
+            let (red_step, green_step, blue_step) = get_color_steps(
+                last_good_index,
+                &table[last_good_index],
+                row.index,
+                &table[row.index],
+            );
 
             for d in 1..index_diff {
                 table[last_good_index + d] = Color::from_colors(
-                    start_color.red + (red_step * d as f64) as u8,
-                    start_color.green + (green_step * d as f64) as u8,
-                    start_color.blue + (blue_step * d as f64) as u8,
+                    (start_color.red as i16 + (red_step * d as f64) as i16) as u8,
+                    (start_color.green as i16 + (green_step * d as f64) as i16) as u8,
+                    (start_color.blue as i16 + (blue_step * d as f64) as i16) as u8,
                 );
             }
         }
@@ -231,10 +256,12 @@ fn read_color_file(filename: &str) -> Vec<ColorRow> {
                 .lines()
                 .map(|x| x.unwrap_or("".into()))
                 .filter(|x| !x.trim().is_empty())
-                .map(|x| get_color_line_values(x).unwrap_or_else(|e| {
-                    eprintln!("Error parsing color file with error {:?}", e);
-                    panic!()
-                }))
+                .map(|x| {
+                    get_color_line_values(x).unwrap_or_else(|e| {
+                        eprintln!("Error parsing color file with error {:?}", e);
+                        panic!()
+                    })
+                })
                 .collect::<Vec<ColorRow>>()
         }
         Err(e) => {
@@ -262,8 +289,8 @@ fn test_read_color_file() {
     let colors = read_color_file(&filepath);
 
     assert_eq!(colors.last().unwrap().index, 9);
-    assert_eq!(colors[0].color.red, 0);    // verifying that values
-    assert_eq!(colors[1].color.red, 255);  // are all correct and
+    assert_eq!(colors[0].color.red, 0); // verifying that values
+    assert_eq!(colors[1].color.red, 255); // are all correct and
 }
 
 #[derive(Debug)]
@@ -277,14 +304,16 @@ fn get_color_line_values(line: String) -> Result<ColorRow, ColorFileParseError> 
     let tokens: Vec<&str> = line.split_ascii_whitespace().collect();
 
     if tokens.len() > 3 {
-        Ok(
-            ColorRow::from_index_and_colors(
-                unwrap_or_return!(tokens[0].parse::<usize>(), Err(ColorFileParseError::IndexParse)).min(u16::MAX as usize),
-                unwrap_or_return!(tokens[1].parse(), Err(ColorFileParseError::ColorParse)),
-                unwrap_or_return!(tokens[2].parse(), Err(ColorFileParseError::ColorParse)),
-                unwrap_or_return!(tokens[3].parse(), Err(ColorFileParseError::ColorParse)),
+        Ok(ColorRow::from_index_and_colors(
+            unwrap_or_return!(
+                tokens[0].parse::<usize>(),
+                Err(ColorFileParseError::IndexParse)
             )
-        )
+            .min(u16::MAX as usize),
+            unwrap_or_return!(tokens[1].parse(), Err(ColorFileParseError::ColorParse)),
+            unwrap_or_return!(tokens[2].parse(), Err(ColorFileParseError::ColorParse)),
+            unwrap_or_return!(tokens[3].parse(), Err(ColorFileParseError::ColorParse)),
+        ))
     } else {
         Err(ColorFileParseError::TooFewTokens)
     }
@@ -295,9 +324,9 @@ fn test_read_color_line() {
     let row = get_color_line_values("      5    9     22 99".to_string()).unwrap();
 
     assert_eq!(row.index, 5);
-    assert_eq!(row.color.red, 9);       // verifying that values
-    assert_eq!(row.color.green, 22);   // are all correct and
-    assert_eq!(row.color.blue, 99);    // final value is extended onward
+    assert_eq!(row.color.red, 9); // verifying that values
+    assert_eq!(row.color.green, 22); // are all correct and
+    assert_eq!(row.color.blue, 99); // final value is extended onward
 }
 
 #[test]
@@ -316,8 +345,32 @@ fn test_color_file_interpolation() {
 
     assert_eq!(table.highest_land, 261);
     assert_eq!(table.len(), 262);
-    
+
     for i in 6..=261 {
         assert_eq!(table[i].red, (i - 6) as u8);
     }
+}
+
+#[test]
+fn test_olsson_color_file_interpolation() {
+    use std::env;
+
+    let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
+    filepath.push_str("\\src\\color\\olsson.col");
+    let table = generate_color_data(&filepath);
+
+    assert_eq!(table.highest_land, 66);
+    assert_eq!(table.len(), 67);
+
+    assert_eq!(table[49].red, 238);
+    assert_eq!(table[49].green, 170);
+    assert_eq!(table[49].blue, 34);
+
+    assert_eq!(table[50].red, 230);
+    assert_eq!(table[50].green, 153);
+    assert_eq!(table[50].blue, 34);
+
+    assert_eq!(table[51].red, 221);
+    assert_eq!(table[51].green, 136);
+    assert_eq!(table[51].blue, 34);
 }

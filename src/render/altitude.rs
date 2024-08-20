@@ -3,7 +3,6 @@ use crate::math::{distance_squared, rand_low};
 use crate::render::ThreadState;
 use std::f64::consts::PI;
 use std::mem;
-use std::rc::Rc;
 
 // planet1()
 pub fn calc_altitude(state: &mut ThreadState, p: &Vertex) -> f64 {

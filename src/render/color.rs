@@ -1,19 +1,17 @@
 use crate::file::FileType;
 use crate::geometry::Vertex;
-use crate::render::altitude::{calc_altitude};
-use crate::render::{RenderState, ThreadState};
+use crate::render::altitude::calc_altitude;
+use crate::render::ThreadState;
 use crate::terrain::biomes;
-use std::sync::Arc;
 
 // planet0()
 pub fn render_pixel(
-    render_state: Arc<RenderState>,
     thread_state: &mut ThreadState,
     p: &Vertex,
     w: usize,
     h: usize,
 ) {
-    let options = render_state.options.clone();    
+    let options = thread_state.options.clone();
     let mut alt: f64 = calc_altitude(thread_state, p);
 
     // calculate temperature based on altitude and latitude
@@ -50,55 +48,59 @@ pub fn render_pixel(
     }
 
     // store height for heightfield
-    if matches!(options.filetype, FileType::heightfield) {
+    if let FileType::heightfield = options.filetype {
         thread_state.heightfield[h][w] = (10_000_000.0 * alt) as i32;
     }
 
-    y2 = p.y * p.y;
-    y2 = y2 * y2;
-    y2 = y2 * y2;
+    y2 = p.y.powi(8);
 
     let mut color: u16;
 
+    let color_table = &thread_state.color_table;
+    
     if options.show_biomes {
         let tt = ((rain * 300.0 - 9.0) as i32).clamp(0, 44) as u8;
         let rr = ((temp * 300.0 + 10.0) as i32).clamp(0, 44) as u8;
         let bio = biomes[tt as usize][rr as usize] as u16;
         if alt <= 0.0 {
-            let c = ((render_state.color_table.sea_level - render_state.color_table.sea_bottom + 1) as f64
+            let c = ((color_table.sea_level - color_table.sea_bottom + 1)
+                as f64
                 * (10.0 * alt)) as u16;
-            color = render_state.color_table.sea_level + c;
-            if color < render_state.color_table.sea_bottom {
-                color = render_state.color_table.sea_bottom;
+            color = color_table.sea_level + c;
+            if color < color_table.sea_bottom {
+                color = color_table.sea_bottom;
             }
         } else {
-            color = bio - 64 + render_state.color_table.lowest_land; // from LAND+2 to LAND+23
+            color = bio - 64 + color_table.lowest_land; // from LAND+2 to LAND+23
         }
     } else if alt <= 0. {
         // if below sea level then
         let lci = options.latitude_color_intensity as f64;
-        if options.use_latitude_coloring && y2 + alt >= (1.0 - 0.02 * lci * lci) {
-            color = render_state.color_table.highest_land; // icecap if close to poles
+        if options.use_latitude_coloring && (y2 + alt) >= (1.0 - 0.02 * lci * lci) {
+            color = color_table.highest_land; // icecap if close to poles
         } else {
-            let c = ((render_state.color_table.sea_level - render_state.color_table.sea_bottom + 1) as f64
+            let c = ((color_table.sea_level - color_table.sea_bottom + 1)
+                as f64
                 * (10.0 * alt)) as u16;
-            color = render_state.color_table.sea_level + c;
-            if color < render_state.color_table.sea_bottom {
-                color = render_state.color_table.sea_bottom;
+            color = color_table.sea_level - c;
+            if color < color_table.sea_bottom {
+                color = color_table.sea_bottom;
             }
         }
     } else {
         if options.use_latitude_coloring {
-            alt += 0.1 * y2; // altitude adjusted with latitude
+            alt += 0.1 * options.latitude_color_intensity as f64 * y2; // altitude adjusted with latitude
         }
-        if alt >= 0.1 {    // if high then        
-            color = render_state.color_table.highest_land;
+        if alt >= 0.1 {
+            // if high then
+            color = color_table.highest_land;
         } else {
-            let c = ((render_state.color_table.highest_land - render_state.color_table.lowest_land + 1) as f64
+            let c = ((color_table.highest_land - color_table.lowest_land
+                + 1) as f64
                 * (10.0 * alt)) as u16;
-            color = render_state.color_table.lowest_land + c;
-            if color > render_state.color_table.highest_land {
-                color = render_state.color_table.highest_land;
+            color = color_table.lowest_land + c;
+            if color > color_table.highest_land {
+                color = color_table.highest_land;
             }
         }
     }

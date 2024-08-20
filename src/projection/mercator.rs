@@ -33,7 +33,7 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
         for w in 0..options.width as usize {
             let theta1 = longitude - 0.5 * PI + PI * (2. * w as f64 - width) / (width * scale);
             let world_point = Vertex::from_point(theta1.cos() * cos2, y, -theta1.sin() * cos2);
-            render_pixel(render_state.clone(), &mut thread_state, &world_point, w, h);
+            render_pixel(&mut thread_state, &world_point, w, h);
         }
         if h > 0 && h % 100 == 0 { 
             let millis = (Utc::now() - time).num_milliseconds();

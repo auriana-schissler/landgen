@@ -34,8 +34,8 @@ fn full_test_run() {
         .to_string();
 
     let args = Args {
-        height: 1000,
-        width: 1000,
+        height: 500,
+        width: 500,
         projection: "m".into(),
         longitude: -130.,
         latitude: 0.,

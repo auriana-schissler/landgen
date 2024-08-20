@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use crate::color::{build_color_data, ColorTable};
 use crate::file::bitmap::validate_size;
 use crate::file::{write_file, ColorMode, FileType};
@@ -7,9 +6,10 @@ use crate::math::rand_low;
 use crate::terrain::LatLong;
 use crate::util::Vec2D;
 use crate::{projection, Args};
+use chrono::Utc;
+use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::thread;
-use chrono::Utc;
 
 mod altitude;
 pub mod color;
@@ -168,7 +168,7 @@ impl GridLines {
     }
 }
 
-fn create_base_tetra(options: &RenderOptions) -> Tetra {
+fn create_base_tetra(options: Rc<RenderOptions>) -> Tetra {
     let seeds = RenderSeeds::new(options.seed);
     Tetra {
         a: Vertex {
@@ -208,10 +208,9 @@ fn create_base_tetra(options: &RenderOptions) -> Tetra {
 
 pub struct RenderState {
     pub options: RenderOptions,
-    pub canvas: RwLock<Vec<Box<Vec2D<u16>>>>,
-    //pub canvas: RwLock<Vec<Vec<u16>>>, // holds a key that corresponds to a color in self.colors
-    pub heightfield: Vec<Box<Vec2D<i32>>>,
-    pub shading: Vec<Box<Vec2D<u8>>>,
+    pub canvas: RwLock<Vec<Vec2D<u16>>>,
+    pub heightfield: Vec<Vec2D<i32>>,
+    pub shading: Vec<Vec2D<u8>>,
     pub color_table: ColorTable,
     pub search_map: [[i32; 30]; 60],
     pub grid_lines: GridLines,
@@ -222,13 +221,9 @@ impl RenderState {
     pub fn new(options: RenderOptions) -> Self {
         Self {
             options: options.clone(),
-            canvas: RwLock::new(vec![Box::new(vec![]); options.render_threads]),
+            canvas: RwLock::new(vec![vec![]; options.render_threads]),
             heightfield: Vec::with_capacity(options.render_threads),
             shading: Vec::with_capacity(options.render_threads),
-            // shading: RwLock::new(vec![
-            //     vec! {0; options.width as usize};
-            //     options.height as usize
-            // ]),
             color_table: build_color_data(&options),
             search_map: [[0; 30]; 60],
             grid_lines: GridLines::new(0, 0),
@@ -249,9 +244,10 @@ pub struct ThreadState {
     pub options: Rc<RenderOptions>,
     pub starting_line: usize,
     pub local_height: usize,
-    pub canvas: Box<Vec2D<u16>>,
-    pub heightfield: Box<Vec2D<i32>>,
-    pub shading: Box<Vec2D<u8>>,
+    pub canvas: Vec2D<u16>,
+    pub heightfield: Vec2D<i32>,
+    pub shading: Vec2D<u8>,
+    pub color_table: ColorTable,
     pub search_map: [[i32; 30]; 60],
     pub base_tetra: Tetra,
     pub cached_tetra: Tetra,
@@ -272,12 +268,13 @@ impl ThreadState {
             options: options.clone(),
             starting_line,
             local_height,
-            canvas: Box::new(vec![vec![0; options.width as usize]; local_height]),
-            heightfield: gen_heightfield(id, &options),
-            shading: gen_shading(id, &options),
+            canvas: vec![vec![0; options.width as usize]; local_height],
+            heightfield: gen_heightfield(id, options.clone()),
+            shading: gen_shading(id, options.clone()),
+            color_table: build_color_data(&options),
             search_map: [[0; 30]; 60],
-            base_tetra: create_base_tetra(&options),
-            cached_tetra: create_base_tetra(&options),
+            base_tetra: create_base_tetra(options.clone()),
+            cached_tetra: create_base_tetra(options.clone()),
             starting_subdivision_depth,
             rain_shadow: 0.0,
             shade: 0,
@@ -285,25 +282,25 @@ impl ThreadState {
     }
 }
 
-fn gen_heightfield(id: usize, options: &RenderOptions) -> Box<Vec2D<i32>> {
+fn gen_heightfield(id: usize, options: Rc<RenderOptions>) -> Vec2D<i32> {
     let height_segment_size =
         (options.height as f64 / options.render_threads as f64).ceil() as usize;
     let starting_line = id * height_segment_size;
     let local_height = height_segment_size.min(options.height as usize - starting_line);
     match options.filetype {
-        FileType::heightfield => Box::new(vec![vec![0; options.width as usize]; local_height]),
-        _ => Box::new(vec![])
+        FileType::heightfield => vec![vec![0; options.width as usize]; local_height],
+        _ => vec![],
     }
 }
 
-fn gen_shading(id: usize, options: &RenderOptions) -> Box<Vec2D<u8>> {
+fn gen_shading(id: usize, options: Rc<RenderOptions>) -> Vec2D<u8> {
     let height_segment_size =
         (options.height as f64 / options.render_threads as f64).ceil() as usize;
     let starting_line = id * height_segment_size;
     let local_height = height_segment_size.min(options.height as usize - starting_line);
     match options.filetype {
-        FileType::heightfield => Box::new(vec![vec![0; options.width as usize]; local_height]),
-        _ => Box::new(vec![])
+        FileType::heightfield => vec![vec![0; options.width as usize]; local_height],
+        _ => vec![],
     }
 }
 
@@ -340,27 +337,23 @@ pub fn execute(args: Args) {
     validate_size(state.clone());
     println!("Starting render");
     let now = Utc::now();
-
-    let mut handles = vec![];
-
-    for thread_id in 0..options.render_threads {
-        println!("Spawning thread {thread_id}");
-        let state = state.clone();
-        handles.push(thread::spawn(move || {
-            match state.options.projection {
-                ProjectionMode::Mercator => projection::mercator::render(thread_id, state.clone()),
-                ProjectionMode::Mollweide => {
-                    projection::mollweide::render(thread_id, state.clone())
-                }
-                _ => panic!(),
-            };
-            println!("Ending thread {thread_id}");
-        }));
-    }
-
-    for thread in handles {
-        thread.join().unwrap();
-    }
+    
+    thread::scope(|scope| {
+        for thread_id in 0..options.render_threads {
+            println!("Spawning thread {thread_id}");
+            let state = state.clone();
+            scope.spawn(move|| {
+                match state.options.projection {
+                    ProjectionMode::Mercator => projection::mercator::render(thread_id, state.clone()),
+                    ProjectionMode::Mollweide => {
+                        projection::mollweide::render(thread_id, state.clone())
+                    }
+                    _ => panic!(),
+                };
+                println!("Ending thread {thread_id}");
+            });
+        }
+    });
 
     // make grid lines
 
@@ -371,7 +364,6 @@ pub fn execute(args: Args) {
     println!("Render completed in {time} seconds");
 }
 
-//struct Tier3Params
 
 fn make_outline() {}
 
