@@ -1,3 +1,4 @@
+use std::f64::consts::PI;
 use crate::color::{build_color_data, ColorTable};
 use crate::file::bitmap::validate_size;
 use crate::file::{write_file, ColorMode, FileType};
@@ -117,14 +118,29 @@ impl Args {
             ),
             show_biomes: self.show_biomes,
             projection: match self.projection.as_str() {
-                "m" => ProjectionMode::Mercator,
+                "m" => {
+                    if self.latitude.abs() >= PI - 1E-10 {
+                        ProjectionMode::Stereographic
+                    } else {
+                        ProjectionMode::Mercator
+                    }
+                },
                 "p" => ProjectionMode::Peters,
                 "q" => ProjectionMode::Square,
                 "s" => ProjectionMode::Stereographic,
                 "o" => ProjectionMode::Orthographic,
                 "g" => ProjectionMode::Gnomonic,
                 "a" => ProjectionMode::Azimuthal,
-                "c" => ProjectionMode::Conical,
+                "c" => {
+                    if self.latitude == 0. {
+                        ProjectionMode::Mercator
+                    }
+                    else if self.latitude.abs() >= 90. {
+                        ProjectionMode::Stereographic
+                    } else {
+                        ProjectionMode::Conical
+                    }
+                },
                 "M" => ProjectionMode::Mollweide,
                 "S" => ProjectionMode::Sinusoidal,
                 "i" => ProjectionMode::Icosahedral,
@@ -345,6 +361,9 @@ pub fn execute(args: Args) {
                 match state.options.projection {
                     ProjectionMode::Azimuthal => {
                         projection::azimuthal::render(thread_id, state.clone())
+                    }
+                    ProjectionMode::Conical => {
+                        projection::conical::render(thread_id, state.clone())
                     }
                     ProjectionMode::Mercator => {
                         projection::mercator::render(thread_id, state.clone())
