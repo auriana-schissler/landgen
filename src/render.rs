@@ -262,8 +262,7 @@ impl ThreadState {
             (options.height as f64 / options.render_threads as f64).ceil() as usize;
         let starting_line = id * height_segment_size;
         let local_height = height_segment_size.min(options.height as usize - starting_line);
-        let starting_subdivision_depth =
-            (3 * (options.scale * options.height as f64).log2() as u32 + 6) as u8;
+        let starting_subdivision_depth = 0;
         Self {
             options: options.clone(),
             starting_line,
@@ -337,14 +336,19 @@ pub fn execute(args: Args) {
     validate_size(state.clone());
     println!("Starting render");
     let now = Utc::now();
-    
+
     thread::scope(|scope| {
         for thread_id in 0..options.render_threads {
             println!("Spawning thread {thread_id}");
             let state = state.clone();
-            scope.spawn(move|| {
+            scope.spawn(move || {
                 match state.options.projection {
-                    ProjectionMode::Mercator => projection::mercator::render(thread_id, state.clone()),
+                    ProjectionMode::Azimuthal => {
+                        projection::azimuthal::render(thread_id, state.clone())
+                    }
+                    ProjectionMode::Mercator => {
+                        projection::mercator::render(thread_id, state.clone())
+                    }
                     ProjectionMode::Mollweide => {
                         projection::mollweide::render(thread_id, state.clone())
                     }
@@ -363,7 +367,6 @@ pub fn execute(args: Args) {
     let time = (Utc::now() - now).num_seconds();
     println!("Render completed in {time} seconds");
 }
-
 
 fn make_outline() {}
 

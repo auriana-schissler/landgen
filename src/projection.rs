@@ -1,5 +1,4 @@
-
-mod azimuthal;
+pub mod azimuthal;
 pub mod conical;
 pub mod gnomonic;
 pub mod icosahedral;
