@@ -380,6 +380,9 @@ pub fn execute(args: Args) {
                     ProjectionMode::Orthographic => {
                         projection::orthographic::render(thread_id, state.clone())
                     }
+                    ProjectionMode::Peters => {
+                        projection::peters::render(thread_id, state.clone())
+                    }
                     _ => panic!(),
                 };
                 println!("Ending thread {thread_id}");
