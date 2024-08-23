@@ -368,6 +368,9 @@ pub fn execute(args: Args) {
                     ProjectionMode::Gnomonic => {
                         projection::gnomonic::render(thread_id, state.clone())
                     }
+                    ProjectionMode::Icosahedral => {
+                        projection::icosahedral::render(thread_id, state.clone())
+                    }
                     ProjectionMode::Mercator => {
                         projection::mercator::render(thread_id, state.clone())
                     }

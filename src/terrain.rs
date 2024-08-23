@@ -82,6 +82,7 @@ impl LatLong {
         }
     }
 
+    /// Takes a latitude and longitude, in radians, and calculates their sines and cosines
     pub fn new_with_trig(lat: f64, long: f64) -> Self {
         Self {
             latitude: lat,
