@@ -386,6 +386,9 @@ pub fn execute(args: Args) {
                     ProjectionMode::Square => {
                         projection::square::render(thread_id, state.clone())
                     }
+                    ProjectionMode::Stereographic => {
+                        projection::stereographic::render(thread_id, state.clone())
+                    }
                     _ => panic!(),
                 };
                 println!("Ending thread {thread_id}");
