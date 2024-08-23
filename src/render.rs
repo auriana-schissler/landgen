@@ -383,6 +383,9 @@ pub fn execute(args: Args) {
                     ProjectionMode::Peters => {
                         projection::peters::render(thread_id, state.clone())
                     }
+                    ProjectionMode::Square => {
+                        projection::square::render(thread_id, state.clone())
+                    }
                     _ => panic!(),
                 };
                 println!("Ending thread {thread_id}");
