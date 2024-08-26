@@ -1,10 +1,10 @@
+use crate::file::ColorMode;
+use crate::get_commandline_footer;
+use crate::render::RenderState;
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
-use crate::file::ColorMode;
-use crate::get_commandline_footer;
-use crate::render::RenderState;
 
 fn get_file_size(state: Arc<RenderState>) -> u64 {
     let (bpp, _, pixel_data_start) = get_bitmap_info(state.clone());
@@ -90,61 +90,63 @@ fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Result<(), io:
             255, 255, 255, 255, // white
         ])?;
     };
-panic!();
     // write pixels
-    // let canvas = state.canvas.read().unwrap();
-    // match color_mode {
-    //     ColorMode::Color => {
-    //         if state.options.shading_level > 0 {
-    //             let shading = state.shading.read().unwrap();
-    //             for h in (0..state.options.height).rev() {
-    //                 for w in 0..state.options.width {
-    //                     let shade = shading[w as usize][h as usize] as u32;
-    //                     let color_index = canvas[w as usize][h as usize] as usize;
-    //                     let color = &state.color_table[color_index];
-    //                     writer.write_all(&[
-    //                         ((shade * color.blue as u32) / 150).min(255) as u8,
-    //                         ((shade * color.green as u32) / 150).min(255) as u8,
-    //                         ((shade * color.red as u32) / 150).min(255) as u8,
-    //                     ])?;
-    //                 }
-    //                 for _ in state.options.width as u32..padded_width {
-    //                     writer.write_all(&[0])?;
-    //                 }
-    //             }
-    //         } else {
-    //             for h in (0..state.options.height).rev() {
-    //                 for w in 0..state.options.width {
-    //                     let color_index = canvas[w as usize][h as usize] as usize;
-    //                     let color = &state.color_table[color_index];
-    //                     writer.write_all(&[color.blue, color.green, color.red])?;
-    //                 }
-    //                 for _ in state.options.width as u32..padded_width {
-    //                     writer.write_all(&[0])?;
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     ColorMode::Monochrome => {
-    //         // we fit 32 pixels per 4 byte cluster
-    //         for h in (0..state.options.height).rev() {
-    //             for w in (0..padded_width).step_by(32) {
-    //                 let mut quad = 0u32;
-    //                 let stop = (state.options.width as u32 - w).min(32);
-    // 
-    //                 for s in 0..stop {
-    //                     let color_index = canvas[(w + s) as usize][h as usize] as usize;
-    //                     if (w + s) < state.options.width as u32
-    //                         && state.color_table[color_index].red != 0
-    //                     {
-    //                         quad |= 0b1 << (31 - s);
-    //                     }
-    //                 }
-    //                 writer.write_all(&quad.to_le_bytes())?;
-    //             }
-    //         }
-    //     }
-    // }
+    let canvas = state.canvas.read().unwrap();
+    match color_mode {
+        ColorMode::Color => {
+            if state.options.shading_level > 0 {
+                for (vi, v) in state.shading.iter().rev().enumerate() {
+                    for (hi, h) in v.iter().rev().enumerate() {
+                        for (i, shade) in h.iter().enumerate().map(|x| (x.0, *x.1 as u32)) {
+                            let color_index = canvas[vi][hi][i] as usize;
+                            let color = &state.color_table[color_index];
+                            writer.write_all(&[
+                                ((shade * color.blue as u32) / 150).min(255) as u8,
+                                ((shade * color.green as u32) / 150).min(255) as u8,
+                                ((shade * color.red as u32) / 150).min(255) as u8,
+                            ])?;
+                        }
+                        for _ in state.options.width as u32..padded_width {
+                            writer.write_all(&[0])?;
+                        }
+                    }
+                }
+            } else {
+                for v in canvas.iter().rev() {
+                    for h in v.iter().rev() {
+                        for color_index in h.iter().map(|x| *x as usize) {
+                            let color = &state.color_table[color_index];
+                            writer.write_all(&[color.blue, color.green, color.red])?;
+                        }
+                        for _ in state.options.width as u32..padded_width {
+                            writer.write_all(&[0])?;
+                        }
+                    }
+                }
+            }
+        }
+        ColorMode::Monochrome => {
+            // we fit 32 pixels per 4 byte cluster
+            for v in (0..canvas.len()).rev() {
+                for h in (0..state.options.height).rev() {
+                    for w in (0..padded_width).step_by(32) {
+                        let mut quad = 0u32;
+                        let stop = (state.options.width as u32 - w).min(32);
+
+                        for s in 0..stop {
+                            let color_index = canvas[v][(w + s) as usize][h as usize] as usize;
+                            if (w + s) < state.options.width as u32
+                                && state.color_table[color_index].red != 0
+                            {
+                                quad |= 0b1 << (31 - s);
+                            }
+                        }
+                        writer.write_all(&quad.to_le_bytes())?;
+                    }
+                }
+            }
+        }
+    }
 
     write!(writer, "{}", cmdline)?;
     writer.flush()?;

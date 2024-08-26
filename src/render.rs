@@ -226,7 +226,7 @@ pub struct RenderState {
     pub options: RenderOptions,
     pub canvas: RwLock<Vec<Vec2D<u16>>>,
     pub heightfield: Vec<Vec2D<i32>>,
-    pub shading: Vec<Vec2D<u8>>,
+    pub shading: Vec<Vec2D<u16>>,
     pub color_table: ColorTable,
     pub search_map: [[i32; 30]; 60],
     pub grid_lines: GridLines,
