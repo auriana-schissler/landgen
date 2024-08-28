@@ -1,41 +1,31 @@
 use crate::file::ColorMode;
 use crate::get_commandline_footer;
 use crate::render::RenderState;
-use std::fs::File;
-use std::io;
-use std::io::{BufWriter, Write};
-use std::sync::Arc;
-use mtpng::{ColorType, CompressionLevel, Header};
 use mtpng::encoder::{Encoder, Options};
+use mtpng::{ColorType, CompressionLevel, Header};
+use std::io;
+use std::io::Write;
+use std::sync::Arc;
 
-pub(super) fn write(state: Arc<RenderState>) -> Result<(), io::Error> {
-    if state.options.output_file.is_some() {
-        let file = File::create(state.options.output_file.to_owned().unwrap())?;
-        let mut writer = BufWriter::new(file);
-        write_to(state.clone(), &mut writer)
-    } else {
-        let mut writer = BufWriter::new(io::stdout());
-        write_to(state.clone(), &mut writer)
-    }
-}
-
-fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Result<(), io::Error> {
+// TODO: Add indexed palette if no shading exists, and embed commandline
+pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Result<(), io::Error> {
     // PNG file specification
     // https://en.wikipedia.org/wiki/PNG
 
-    let cmdline = get_commandline_footer();
+    let _cmdline = get_commandline_footer();
 
     let mut header = Header::new();
     header.set_size(state.options.width as u32, state.options.height as u32)?;
     header.set_color(ColorType::Truecolor, 8)?;
 
     let mut options = Options::new();
-    options.set_compression_level(CompressionLevel::High)?;
-    options.set_streaming(false)?;
+    options.set_compression_level(CompressionLevel::Default)?;
+    options.set_streaming(true)?;
 
     let mut encoder = Encoder::new(writer, &options);
-
     encoder.write_header(&header)?;
+    
+    // TODO: detect if any color-altering options are enabled, and switch to writing a palette instead 
 
     let canvas = state.canvas.read().unwrap();
     

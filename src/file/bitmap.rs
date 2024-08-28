@@ -1,9 +1,8 @@
 use crate::file::ColorMode;
 use crate::get_commandline_footer;
 use crate::render::RenderState;
-use std::fs::File;
 use std::io;
-use std::io::{BufWriter, Write};
+use std::io::Write;
 use std::sync::Arc;
 
 fn get_file_size(state: Arc<RenderState>) -> u64 {
@@ -26,18 +25,7 @@ fn get_padded_width(state: Arc<RenderState>) -> u32 {
     }
 }
 
-pub(super) fn write(state: Arc<RenderState>) -> Result<(), io::Error> {
-    if state.options.output_file.is_some() {
-        let file = File::create(state.options.output_file.to_owned().unwrap())?;
-        let mut writer = BufWriter::new(file);
-        write_to(state, &mut writer)
-    } else {
-        let mut writer = BufWriter::new(io::stdout());
-        write_to(state, &mut writer)
-    }
-}
-
-fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Result<(), io::Error> {
+pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Result<(), io::Error> {
     // Bitmap file specification
     // https://upload.wikimedia.org/wikipedia/commons/7/75/BMPfileFormat.svg
     // Bitmaps are considered malformed if height or width are over 32,768

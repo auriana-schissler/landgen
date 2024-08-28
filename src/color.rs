@@ -291,7 +291,7 @@ fn test_read_color_file() {
     use std::env;
 
     let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
-    filepath.push_str("\\src\\color\\landmask.col");
+    filepath.push_str("\\src\\color_files\\landmask.col");
     let colors = read_color_file(&filepath);
 
     assert_eq!(colors.last().unwrap().index, 9);
@@ -346,7 +346,7 @@ fn test_color_file_interpolation() {
     use std::env;
 
     let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
-    filepath.push_str("\\src\\color\\greyscale.col");
+    filepath.push_str("\\src\\color_files\\greyscale.col");
     let table = generate_color_data(&filepath);
 
     assert_eq!(table.highest_land, 261);
@@ -362,7 +362,7 @@ fn test_olsson_color_file_interpolation() {
     use std::env;
 
     let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
-    filepath.push_str("\\src\\color\\olsson.col");
+    filepath.push_str("\\src\\color_files\\olsson.col");
     let table = generate_color_data(&filepath);
 
     assert_eq!(table.highest_land, 66);
