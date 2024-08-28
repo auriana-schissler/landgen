@@ -55,11 +55,6 @@ pub static biomes: LazyLock<[[u8; 45]; 45]> = LazyLock::new(|| {
     ]
 });
 
-// Character table for XPM output
-static XPMCharacters: LazyLock<[u8; 64]> = LazyLock::new(|| {
-    b"@$.,:;-+=#*&ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".to_owned()
-});
-
 #[derive(Clone)]
 pub struct LatLong {
     pub latitude: f64,
