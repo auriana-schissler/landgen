@@ -168,7 +168,6 @@ pub fn execute(
                 tmp = 0.0001;
             }
 
-            x2 = p.x * x1 + p.y * y1 + p.z * z1;
             z2 = -p.z / tmp * x1 + p.x / tmp * z1;
             if lab > 0.04 {
                 e.rain_shadow = (tetra.a.rain_shadow + tetra.b.rain_shadow
@@ -218,7 +217,6 @@ pub fn execute(
                 if tmp < 0.0001 {
                     tmp = 0.0001;
                 }
-                x2 = p.x * x1 + p.y * y1 + p.z * z1;
                 y2 = -p.x * p.y / tmp * x1 + tmp * y1 - p.z * p.y / tmp * z1;
                 z2 = -p.z / tmp * x1 + p.x / tmp * z1;
                 state.shade = ((-(PI * options.daylight.longitude / 180.0).sin() * y2

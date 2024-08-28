@@ -1,4 +1,3 @@
-use crate::file::ColorMode;
 use crate::get_commandline_footer;
 use crate::render::RenderState;
 use mtpng::encoder::{Encoder, Options};
@@ -47,12 +46,4 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     //encoder.write_chunk(b"CMDL", cmdline.as_bytes())?;
     encoder.finish()?;
     Ok(())
-}
-
-// (bits per pixel, indexed colors, color type)
-fn get_image_info(state: &RenderState) -> (u8, u8, u8) {
-    match state.get_color_mode() {
-        ColorMode::Color => (8, 0, 2),
-        ColorMode::Monochrome => (1, 2, 0),
-    }
 }

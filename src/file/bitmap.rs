@@ -83,7 +83,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     match color_mode {
         ColorMode::Color => {
             if state.options.shading_level > 0 {
-                for (vi, v) in state.shading.iter().rev().enumerate() {
+                for (vi, v) in state.shading.read().unwrap().iter().rev().enumerate() {
                     for (hi, h) in v.iter().rev().enumerate() {
                         for (i, shade) in h.iter().enumerate().map(|x| (x.0, *x.1 as u32)) {
                             let color_index = canvas[vi][hi][i] as usize;

@@ -15,13 +15,15 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
         state.options.width, state.options.height
     )?;
 
+    let shading = state.shading.read().unwrap();
+    
     for (vi, v) in state.canvas.read().unwrap().iter().enumerate() {
         for (hi, h) in v.iter().rev().enumerate() {
             for (i, color_index) in h.iter().enumerate().map(|x| (x.0, *x.1 as usize)) {
                 let color = &state.color_table[color_index];
 
                 if state.options.shading_level > 0 {
-                    let shade = state.shading[vi][hi][i] as u32;
+                    let shade = shading[vi][hi][i] as u32;
                     writer.write_all(&[
                         ((shade * color.blue as u32) / 150).min(255) as u8,
                         ((shade * color.green as u32) / 150).min(255) as u8,

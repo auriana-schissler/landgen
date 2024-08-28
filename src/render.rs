@@ -225,8 +225,8 @@ fn create_base_tetra(options: Rc<RenderOptions>) -> Tetra {
 pub struct RenderState {
     pub options: RenderOptions,
     pub canvas: RwLock<Vec<Vec2D<u16>>>,
-    pub heightfield: Vec<Vec2D<i32>>,
-    pub shading: Vec<Vec2D<u16>>,
+    pub heightfield: RwLock<Vec<Vec2D<i32>>>,
+    pub shading: RwLock<Vec<Vec2D<u16>>>,
     pub color_table: ColorTable,
     pub search_map: [[i32; 30]; 60],
     pub grid_lines: GridLines,
@@ -238,8 +238,8 @@ impl RenderState {
         Self {
             options: options.clone(),
             canvas: RwLock::new(vec![vec![]; options.render_threads]),
-            heightfield: Vec::with_capacity(options.render_threads),
-            shading: Vec::with_capacity(options.render_threads),
+            heightfield: RwLock::new(Vec::with_capacity(options.render_threads)),
+            shading: RwLock::new(Vec::with_capacity(options.render_threads)),
             color_table: build_color_data(&options),
             search_map: [[0; 30]; 60],
             grid_lines: GridLines::new(0, 0),
@@ -383,13 +383,15 @@ pub fn execute(args: Args) {
                     ProjectionMode::Peters => {
                         projection::peters::render(thread_id, state.clone())
                     }
+                    ProjectionMode::Sinusoidal => {
+                        projection::sinusoidal::render(thread_id, state.clone())
+                    }
                     ProjectionMode::Square => {
                         projection::square::render(thread_id, state.clone())
                     }
                     ProjectionMode::Stereographic => {
                         projection::stereographic::render(thread_id, state.clone())
                     }
-                    _ => panic!(),
                 };
                 println!("Ending thread {thread_id}");
             });

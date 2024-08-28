@@ -27,9 +27,9 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
     for h in 0..thread_state.local_height as i32 {
         let real_h = h + thread_state.starting_line as i32;
         for w in 0..options.width {
-            let mut x = (2 * w - options.width) as f64 / (options.height as f64 * scale);
+            let x = (2 * w - options.width) as f64 / (options.height as f64 * scale);
             let mut y = (2 * real_h - options.height) as f64 / (options.height as f64 * scale) + y2;
-            let mut zz = x * x + y * y;
+            let zz = x * x + y * y;
             let mut theta1 = if zz == 0. { 0. } else { k1 * x.atan2(y) };
             if theta1 < -PI || theta1 > PI {
                 thread_state.canvas[h as usize][w as usize] = thread_state.color_table.back;

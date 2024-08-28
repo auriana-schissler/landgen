@@ -1,5 +1,4 @@
 use crate::color::Color;
-use crate::file::ColorMode;
 use crate::get_commandline_footer;
 use crate::render::RenderState;
 use std::io;
@@ -68,12 +67,4 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     writeln!(writer, "}};")?;
     writer.flush()?;
     Ok(())
-}
-
-// (bits per pixel, indexed colors, pixel data index)
-fn get_bitmap_info(state: Arc<RenderState>) -> (u8, u8, u8) {
-    match state.get_color_mode() {
-        ColorMode::Color => (24u8, 0u8, 54u8),
-        ColorMode::Monochrome => (1, 2, 62),
-    }
 }
