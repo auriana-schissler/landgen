@@ -45,6 +45,7 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usi
     // store height for heightfield
     if let FileType::heightfield = options.filetype {
         thread_state.heightfield[h][w] = (10_000_000.0 * alt) as i32;
+        return;
     }
 
     y2 = p.y.powi(8);
@@ -86,6 +87,9 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usi
     };
 
     thread_state.canvas[h][w] = color;
+    if thread_state.shade > 0 {
+        thread_state.shading[h][w] = thread_state.shade;
+    }
 
     // store (x,y,z) coordinates for grid drawing
     // if vgrid != 0.0 {
@@ -96,8 +100,4 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usi
     //     yyy[i][j] = y;
     // }
     //
-    // // store shading info
-    // if doshade > 0 {
-    //     shades[i][j] = shade;
-    // }
 }

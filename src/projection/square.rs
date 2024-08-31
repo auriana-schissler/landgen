@@ -1,6 +1,6 @@
 use crate::geometry::Vertex;
 use crate::render::color::render_pixel;
-use crate::render::{RenderState, ThreadState};
+use crate::render::{commit_render_data, RenderState, ThreadState};
 use chrono::prelude::*;
 use std::f64::consts::PI;
 use std::rc::Rc;
@@ -50,5 +50,5 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
             println!("Thread {thread_id} completed line {h} - {pixels_per_second}pps",);
         }
     }
-    render_state.canvas.write().unwrap()[thread_id] = thread_state.canvas;
+    commit_render_data(thread_id, thread_state, render_state.clone());
 }

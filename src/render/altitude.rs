@@ -101,8 +101,7 @@ pub fn execute(
             return execute(state, tetra, p, subdivision_depth);
         }
 
-        if subdivision_depth == state.starting_subdivision_depth - 5
-        {
+        if subdivision_depth == state.starting_subdivision_depth - 5 {
             state.cached_tetra = tetra.clone();
         }
 
@@ -186,9 +185,9 @@ pub fn execute(
 
         if side_check(&ea, &ec, &ed, &ep) {
             // point is inside acde
-                mem::swap(&mut tetra.a, &mut tetra.c);
-                mem::swap(&mut tetra.b, &mut tetra.d);
-                tetra.d = e;
+            mem::swap(&mut tetra.a, &mut tetra.c);
+            mem::swap(&mut tetra.b, &mut tetra.d);
+            tetra.d = e;
             execute(state, tetra, p, subdivision_depth - 1)
         } else {
             // point is inside bcde
@@ -204,11 +203,20 @@ pub fn execute(
             1 | 2 => {
                 /* bump map */
                 x1 = 0.25 * (tetra.a.x + tetra.b.x + tetra.c.x + tetra.d.x);
-                x1 = calc_bump_point(tetra, x1);
+                x1 = tetra.a.altitude * (x1 - tetra.a.x)
+                   + tetra.b.altitude * (x1 - tetra.b.x)
+                   + tetra.c.altitude * (x1 - tetra.c.x)
+                   + tetra.d.altitude * (x1 - tetra.d.x);
                 y1 = 0.25 * (tetra.a.y + tetra.b.y + tetra.c.y + tetra.d.y);
-                y1 = calc_bump_point(tetra, y1);
+                y1 = tetra.a.altitude * (y1 - tetra.a.y)
+                   + tetra.b.altitude * (y1 - tetra.b.y)
+                   + tetra.c.altitude * (y1 - tetra.c.y)
+                   + tetra.d.altitude * (y1 - tetra.d.y);
                 z1 = 0.25 * (tetra.a.z + tetra.b.z + tetra.c.z + tetra.d.z);
-                z1 = calc_bump_point(tetra, z1);
+                z1 = tetra.a.altitude * (z1 - tetra.a.z)
+                   + tetra.b.altitude * (z1 - tetra.b.z)
+                   + tetra.c.altitude * (z1 - tetra.c.z)
+                   + tetra.d.altitude * (z1 - tetra.d.z);
                 l1 = (x1 * x1 + y1 * y1 + z1 * z1).sqrt();
                 if l1 == 0.0 {
                     l1 = 1.0;
@@ -219,12 +227,13 @@ pub fn execute(
                 }
                 y2 = -p.x * p.y / tmp * x1 + tmp * y1 - p.z * p.y / tmp * z1;
                 z2 = -p.z / tmp * x1 + p.x / tmp * z1;
+
                 state.shade = ((-(PI * options.daylight.longitude / 180.0).sin() * y2
                     - (PI * options.shading_level as f64 / 180.0).cos() * z2)
                     / l1
                     * 48.0
-                    + 128.0) as i32;
-                state.shade = state.shade.clamp(10, 255);
+                    + 128.0)
+                    .clamp(10., 255.) as u8;
                 if options.shading_level == 2
                     && (tetra.a.altitude + tetra.b.altitude + tetra.c.altitude + tetra.d.altitude)
                         < 0.0
@@ -262,8 +271,8 @@ pub fn execute(
                 y2 = -(PI * options.daylight.latitude / 180.0).sin();
                 z2 = -(PI * options.daylight.longitude / 180.0 - 0.5 * PI).sin()
                     * (PI * options.daylight.latitude / 180.0).cos();
-                state.shade = ((x1 * x2 + y1 * y2 + z1 * z2) / l1 * 170.0 + 10.0) as i32;
-                state.shade = state.shade.clamp(10, 255);
+
+                state.shade = ((x1 * x2 + y1 * y2 + z1 * z2) / l1 * 170.0 + 10.0).clamp(10., 255.) as u8;
             }
             _ => {}
         }

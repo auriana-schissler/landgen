@@ -1,6 +1,6 @@
 use crate::geometry::Vertex;
 use crate::render::color::render_pixel;
-use crate::render::{RenderState, ThreadState};
+use crate::render::{commit_render_data, RenderState, ThreadState};
 use chrono::prelude::*;
 use std::f64::consts::PI;
 use std::rc::Rc;
@@ -31,7 +31,7 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
             let mut y = (2 * real_h - options.height) as f64 / (options.height as f64 * scale) + y2;
             let zz = x * x + y * y;
             let mut theta1 = if zz == 0. { 0. } else { k1 * x.atan2(y) };
-            if theta1 < -PI || theta1 > PI {
+            if !(-PI..=PI).contains(&theta1) {
                 thread_state.canvas[h as usize][w as usize] = thread_state.color_table.back;
                 if options.shading_level > 0 {
                     thread_state.shading[h as usize][w as usize] = 255;
@@ -39,7 +39,7 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
             } else {
                 theta1 += p.longitude - 0.5 * PI;
                 let theta2 = k1 * ((zz - c) / (zz + c)).asin();
-                if theta2 > 0.5 * PI || theta2 < -0.5 * PI {
+                if !(-0.5 * PI..=0.5 * PI).contains(&theta2) {
                     thread_state.canvas[h as usize][w as usize] = thread_state.color_table.back;
                     if options.shading_level > 0 {
                         thread_state.shading[h as usize][w as usize] = 255;
@@ -59,5 +59,5 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
             println!("Thread {thread_id} completed line {h} - {pixels_per_second}pps",);
         }
     }
-    render_state.canvas.write().unwrap()[thread_id] = thread_state.canvas;
+    commit_render_data(thread_id, thread_state, render_state.clone());
 }

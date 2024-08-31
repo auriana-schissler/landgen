@@ -80,35 +80,26 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     };
     // write pixels
     let canvas = state.canvas.read().unwrap();
+    let shading = state.shading.read().unwrap();
     match color_mode {
         ColorMode::Color => {
-            if state.options.shading_level > 0 {
-                for (vi, v) in state.shading.read().unwrap().iter().rev().enumerate() {
-                    for (hi, h) in v.iter().rev().enumerate() {
-                        for (i, shade) in h.iter().enumerate().map(|x| (x.0, *x.1 as u32)) {
-                            let color_index = canvas[vi][hi][i] as usize;
-                            let color = &state.color_table[color_index];
-                            writer.write_all(&[
-                                ((shade * color.blue as u32) / 150).min(255) as u8,
-                                ((shade * color.green as u32) / 150).min(255) as u8,
-                                ((shade * color.red as u32) / 150).min(255) as u8,
-                            ])?;
-                        }
-                        for _ in state.options.width as u32..padded_width {
-                            writer.write_all(&[0])?;
-                        }
+            for (vi, v) in canvas.iter().enumerate().rev() {
+                for (hi, h) in v.iter().enumerate().rev() {
+                    for (i, color_index) in h.iter().enumerate().map(|x| (x.0, *x.1 as usize)) {
+                        let shade = if state.options.shading_level > 0 {
+                            shading[vi][hi][i] as u32
+                        } else {
+                            150
+                        };
+                        let color = &state.color_table[color_index];
+                        writer.write_all(&[
+                            (shade * color.blue as u32 / 150).min(255) as u8,
+                            (shade * color.green as u32 / 150).min(255) as u8,
+                            (shade * color.red as u32 / 150).min(255) as u8,
+                        ])?;
                     }
-                }
-            } else {
-                for v in canvas.iter().rev() {
-                    for h in v.iter().rev() {
-                        for color_index in h.iter().map(|x| *x as usize) {
-                            let color = &state.color_table[color_index];
-                            writer.write_all(&[color.blue, color.green, color.red])?;
-                        }
-                        for _ in state.options.width as u32..padded_width {
-                            writer.write_all(&[0])?;
-                        }
+                    for _ in state.options.width as u32..padded_width {
+                        writer.write_all(&[0])?;
                     }
                 }
             }

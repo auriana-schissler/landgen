@@ -42,16 +42,17 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     writeln!(writer, "/* width height ncolors chars_per_pixel */")?;
     writeln!(
         writer,
-        "\"{} {} {} {}\"",
+        "\"{} {} {} {}\",",
         state.options.width,
         state.options.height,
         state.color_table.len(),
         chars_per_pixel
     )?;
 
+    writeln!(writer, "/* colors */")?;
     for i in 0..state.color_table.len() {
         let Color { red, green, blue } = &state.color_table[i];
-        writeln!(writer, "{} c #{red:2x}{green:2x}{blue:2x}", get_chars(chars, i, chars_per_pixel))?;
+        writeln!(writer, "\"{} c #{red:2x}{green:2x}{blue:2x}\",", get_chars(chars, i, chars_per_pixel))?;
     }
 
     writeln!(writer, "/* pixels */")?;
@@ -61,7 +62,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
             for color_index in h.iter().map(|x| *x as usize) {
                 writeln!(writer, "{}", get_chars(chars, color_index, chars_per_pixel))?;
             }
-            writeln!(writer, "\"")?;
+            writeln!(writer, "\",")?;
         }
     }
     writeln!(writer, "}};")?;
