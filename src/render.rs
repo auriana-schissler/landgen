@@ -1,4 +1,3 @@
-use std::f64::consts::PI;
 use crate::color::{build_color_data, ColorTable};
 use crate::file::bitmap::validate_size;
 use crate::file::{write_file, ColorMode, FileType};
@@ -8,6 +7,7 @@ use crate::terrain::LatLong;
 use crate::util::Vec2D;
 use crate::{projection, Args};
 use chrono::Utc;
+use std::f64::consts::PI;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -124,7 +124,7 @@ impl Args {
                     } else {
                         ProjectionMode::Mercator
                     }
-                },
+                }
                 "p" => ProjectionMode::Peters,
                 "q" => ProjectionMode::Square,
                 "s" => ProjectionMode::Stereographic,
@@ -134,13 +134,12 @@ impl Args {
                 "c" => {
                     if self.latitude == 0. {
                         ProjectionMode::Mercator
-                    }
-                    else if self.latitude.abs() >= 90. {
+                    } else if self.latitude.abs() >= 90. {
                         ProjectionMode::Stereographic
                     } else {
                         ProjectionMode::Conical
                     }
-                },
+                }
                 "M" => ProjectionMode::Mollweide,
                 "S" => ProjectionMode::Sinusoidal,
                 "i" => ProjectionMode::Icosahedral,
@@ -226,7 +225,7 @@ pub struct RenderState {
     pub options: RenderOptions,
     pub canvas: RwLock<Vec<Vec2D<u16>>>,
     pub heightfield: RwLock<Vec<Vec2D<i32>>>,
-    pub shading: RwLock<Vec<Vec2D<u16>>>,
+    pub shading: RwLock<Vec<Vec2D<u8>>>,
     pub color_table: ColorTable,
     pub search_map: [[i32; 30]; 60],
     pub grid_lines: GridLines,
@@ -238,8 +237,15 @@ impl RenderState {
         Self {
             options: options.clone(),
             canvas: RwLock::new(vec![vec![]; options.render_threads]),
-            heightfield: RwLock::new(Vec::with_capacity(options.render_threads)),
-            shading: RwLock::new(Vec::with_capacity(options.render_threads)),
+            heightfield: RwLock::new(match options.filetype {
+                FileType::heightfield => vec![],
+                _ => vec![vec![]; options.render_threads],
+            }),
+            shading: RwLock::new(if options.shading_level > 0 {
+                vec![vec![]; options.render_threads]
+            } else {
+                vec![]
+            }),
             color_table: build_color_data(&options),
             search_map: [[0; 30]; 60],
             grid_lines: GridLines::new(0, 0),
@@ -269,7 +275,7 @@ pub struct ThreadState {
     pub cached_tetra: Tetra,
     pub starting_subdivision_depth: u8,
     pub rain_shadow: f64,
-    pub shade: i32,
+    pub shade: u8,
 }
 
 impl ThreadState {
@@ -314,8 +320,14 @@ fn gen_shading(id: usize, options: Rc<RenderOptions>) -> Vec2D<u8> {
     let starting_line = id * height_segment_size;
     let local_height = height_segment_size.min(options.height as usize - starting_line);
     match options.filetype {
-        FileType::heightfield => vec![vec![0; options.width as usize]; local_height],
-        _ => vec![],
+        FileType::heightfield => vec![],
+        _ => {
+            if options.shading_level > 0 {
+                vec![vec![0; options.width as usize]; local_height]
+            } else {
+                vec![]
+            }
+        }
     }
 }
 
@@ -380,15 +392,11 @@ pub fn execute(args: Args) {
                     ProjectionMode::Orthographic => {
                         projection::orthographic::render(thread_id, state.clone())
                     }
-                    ProjectionMode::Peters => {
-                        projection::peters::render(thread_id, state.clone())
-                    }
+                    ProjectionMode::Peters => projection::peters::render(thread_id, state.clone()),
                     ProjectionMode::Sinusoidal => {
                         projection::sinusoidal::render(thread_id, state.clone())
                     }
-                    ProjectionMode::Square => {
-                        projection::square::render(thread_id, state.clone())
-                    }
+                    ProjectionMode::Square => projection::square::render(thread_id, state.clone()),
                     ProjectionMode::Stereographic => {
                         projection::stereographic::render(thread_id, state.clone())
                     }
@@ -400,18 +408,73 @@ pub fn execute(args: Args) {
 
     // make grid lines
 
-    // smooth shading
+    smooth_shading(state.clone());
 
     let _ = write_file(state.clone());
     let time = (Utc::now() - now).num_seconds();
     println!("Render completed in {time} seconds");
 }
 
+pub fn commit_render_data(
+    thread_id: usize,
+    thread_state: ThreadState,
+    render_state: Arc<RenderState>,
+) {
+    match thread_state.options.filetype {
+        FileType::heightfield => {
+            render_state.heightfield.write().unwrap()[thread_id] = thread_state.heightfield;
+        }
+        _ => {
+            render_state.canvas.write().unwrap()[thread_id] = thread_state.canvas;
+            if thread_state.options.shading_level > 0 {
+                render_state.shading.write().unwrap()[thread_id] = thread_state.shading;
+            }
+        }
+    }
+}
+
 fn make_outline() {}
 
 fn read_map() {}
 
-fn smooth_shading() {}
+fn smooth_shading(state: Arc<RenderState>) {
+    let mut shading = state.shading.write().unwrap();
+    if shading.len() == 0 {
+        return;
+    }
+
+    let last_slice_index = shading.len() - 1;
+    let slice_height_index = shading[0].len() - 1;
+    let width_limit = state.options.width as usize - 2;
+
+    for vi in 0..=last_slice_index {
+        for hi in 0..shading[vi].len() {
+            if vi == last_slice_index && hi == shading[vi].len() - 2 {
+                return; // The final row of the image is not smoothed
+            }
+
+            for wi in 0..shading[vi][hi].len() {
+                if wi >= width_limit {
+                    continue;
+                }
+                let p = 4 * shading[vi][hi][wi] as u16;
+                let w1 = 2 * shading[vi][hi][wi + 1] as u16;
+                let (h1, hw1) = if hi == slice_height_index {
+                    (
+                        2 * shading[vi + 1][0][wi] as u16,
+                        shading[vi + 1][0][wi + 1] as u16,
+                    )
+                } else {
+                    (
+                        2 * shading[vi][hi + 1][wi] as u16,
+                        shading[vi][hi + 1][wi + 1] as u16,
+                    )
+                };
+                shading[vi][hi][wi] = ((p + h1 + w1 + hw1 + 4) / 9).min(255) as u8;
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum ProjectionMode {
