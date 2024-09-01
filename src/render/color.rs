@@ -1,4 +1,3 @@
-use crate::file::FileType;
 use crate::geometry::Vertex;
 use crate::render::altitude::calc_altitude;
 use crate::render::ThreadState;
@@ -43,9 +42,8 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usi
     }
 
     // store height for heightfield
-    if let FileType::heightfield = options.filetype {
+    if options.generate_heightfield {
         thread_state.heightfield[h][w] = (10_000_000.0 * alt) as i32;
-        return;
     }
 
     y2 = p.y.powi(8);
@@ -77,7 +75,8 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usi
         if options.use_latitude_coloring {
             alt += 0.1 * options.latitude_color_intensity as f64 * y2; // altitude adjusted with latitude
         }
-        if alt >= 0.1 {  // if high then
+        if alt >= 0.1 {
+            // if high then
             color_table.highest_land
         } else {
             let altitude = (10.0 * alt).min(1.);

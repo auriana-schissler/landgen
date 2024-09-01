@@ -22,7 +22,8 @@ pub struct RenderOptions {
     pub height: i32,
     pub scale: f64,
     pub output_file: Option<String>,
-    pub filetype: FileType,
+    pub filetypes: Vec<FileType>,
+    pub generate_heightfield: bool,
     pub center_point: LatLong,
     pub gridsize: LatLong,
     pub initial_altitude: f64,
@@ -34,8 +35,6 @@ pub struct RenderOptions {
     pub draw_land_edge: Option<u8>,
     pub daylight: LatLong,
     pub delta_map: Option<f64>,
-    pub distance_variation: bool,
-    pub altitude_variation: bool,
     pub map_rotation: LatLong,
     pub show_biomes: bool,
     pub projection: ProjectionMode,
@@ -52,18 +51,24 @@ pub struct RenderOptions {
 }
 
 impl RenderOptions {
-    pub fn get_filetype(args: &Args) -> FileType {
+    pub fn get_filetypes(args: &Args) -> Vec<FileType> {
+        let mut retval = vec![];
         if args.use_ppm_format {
-            FileType::ppm
-        } else if args.use_xpm_format {
-            FileType::xpm
-        } else if args.use_png_format {
-            FileType::png
-        } else if args.use_heightfield_format {
-            FileType::heightfield
-        } else {
-            FileType::bmp
+            retval.push(FileType::ppm);
         }
+        if args.use_xpm_format {
+            retval.push(FileType::xpm);
+        }
+        if args.use_png_format {
+            retval.push(FileType::png);
+        }
+        if args.use_heightfield_format {
+            retval.push(FileType::heightfield);
+        }
+        if args.use_bmp_format {
+            retval.push(FileType::bmp);
+        }
+        retval
     }
 }
 
@@ -95,7 +100,8 @@ impl Args {
             height: self.height as i32,
             scale: self.magnification.clamp(0.1, 100_000.0),
             output_file: self.output_file.clone(),
-            filetype: RenderOptions::get_filetype(&self),
+            filetypes: RenderOptions::get_filetypes(&self),
+            generate_heightfield: self.use_heightfield_format,
             center_point: LatLong::new_with_trig(
                 self.latitude.to_radians(),
                 self.longitude.to_radians(),
@@ -110,8 +116,6 @@ impl Args {
             draw_land_edge: self.draw_land_edge,
             daylight: LatLong::new(self.light_latitude, self.light_longitude),
             delta_map: self.use_delta_map,
-            distance_variation: self.distance_variation,
-            altitude_variation: self.altitude_variation,
             map_rotation: LatLong::new(
                 -self.map_rotation[0].to_radians(),
                 -self.map_rotation[1].to_radians(),
@@ -158,9 +162,10 @@ impl Args {
             } else {
                 0
             },
-            alt_diff_weight: 0.45,
-            alt_diff_power: 1.0,
-            distance_weight: 0.035,
+            alt_diff_weight: self.altitude_variation
+                / if self.make_wrinkly_map { 2.0 } else { 1.0 },
+            alt_diff_power: if self.make_wrinkly_map { 0.75 } else { 1.0 },
+            distance_weight: self.distance_variation,
             distance_power: 0.47,
             render_threads: self.render_threads as usize,
         }
@@ -237,9 +242,10 @@ impl RenderState {
         Self {
             options: options.clone(),
             canvas: RwLock::new(vec![vec![]; options.render_threads]),
-            heightfield: RwLock::new(match options.filetype {
-                FileType::heightfield => vec![],
-                _ => vec![vec![]; options.render_threads],
+            heightfield: RwLock::new(if options.generate_heightfield {
+                vec![vec![]; options.render_threads]
+            } else {
+                vec![]
             }),
             shading: RwLock::new(if options.shading_level > 0 {
                 vec![vec![]; options.render_threads]
@@ -308,9 +314,10 @@ fn gen_heightfield(id: usize, options: Rc<RenderOptions>) -> Vec2D<i32> {
         (options.height as f64 / options.render_threads as f64).ceil() as usize;
     let starting_line = id * height_segment_size;
     let local_height = height_segment_size.min(options.height as usize - starting_line);
-    match options.filetype {
-        FileType::heightfield => vec![vec![0; options.width as usize]; local_height],
-        _ => vec![],
+    if options.generate_heightfield {
+        vec![vec![0; options.width as usize]; local_height]
+    } else {
+        vec![]
     }
 }
 
@@ -319,15 +326,12 @@ fn gen_shading(id: usize, options: Rc<RenderOptions>) -> Vec2D<u8> {
         (options.height as f64 / options.render_threads as f64).ceil() as usize;
     let starting_line = id * height_segment_size;
     let local_height = height_segment_size.min(options.height as usize - starting_line);
-    match options.filetype {
-        FileType::heightfield => vec![],
-        _ => {
-            if options.shading_level > 0 {
-                vec![vec![0; options.width as usize]; local_height]
-            } else {
-                vec![]
-            }
-        }
+    if (!options.filetypes.contains(&FileType::heightfield) || options.filetypes.len() > 1)
+        && options.shading_level > 0
+    {
+        vec![vec![0; options.width as usize]; local_height]
+    } else {
+        vec![]
     }
 }
 
@@ -420,21 +424,34 @@ pub fn commit_render_data(
     thread_state: ThreadState,
     render_state: Arc<RenderState>,
 ) {
-    match thread_state.options.filetype {
-        FileType::heightfield => {
-            render_state.heightfield.write().unwrap()[thread_id] = thread_state.heightfield;
-        }
-        _ => {
-            render_state.canvas.write().unwrap()[thread_id] = thread_state.canvas;
-            if thread_state.options.shading_level > 0 {
-                render_state.shading.write().unwrap()[thread_id] = thread_state.shading;
-            }
+    if thread_state
+        .options
+        .filetypes
+        .contains(&FileType::heightfield)
+    {
+        render_state.heightfield.write().unwrap()[thread_id] = thread_state.heightfield;
+    }
+
+    if !thread_state
+        .options
+        .filetypes
+        .contains(&FileType::heightfield)
+        || thread_state.options.filetypes.len() > 1
+    {
+        render_state.canvas.write().unwrap()[thread_id] = thread_state.canvas;
+        if thread_state.options.shading_level > 0 {
+            render_state.shading.write().unwrap()[thread_id] = thread_state.shading;
         }
     }
 }
 
-fn make_outline() {}
+// TODO: Generate contour lines and outlines
+fn generate_outlines(state: Arc<RenderState>) {
 
+    //if state.options
+}
+
+// TODO: Eventually add in map reading (from file or stdin)
 fn read_map() {}
 
 fn smooth_shading(state: Arc<RenderState>) {

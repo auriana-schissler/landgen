@@ -11,7 +11,7 @@ use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
 #[allow(non_camel_case_types, non_upper_case_globals)]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum FileType {
     bmp = 1,
     ppm = 2,
@@ -25,7 +25,7 @@ pub enum ColorMode {
     Monochrome,
 }
 
-pub fn get_file_extension<'a>(filetype: FileType) -> &'a str {
+pub fn get_file_extension<'a>(filetype: &FileType) -> &'a str {
     match filetype {
         FileType::bmp => ".bmp",
         FileType::ppm => ".ppm",
@@ -36,16 +36,28 @@ pub fn get_file_extension<'a>(filetype: FileType) -> &'a str {
 }
 
 pub fn write_file(state: Arc<RenderState>) -> Result<(), io::Error> {
-    if state.options.output_file.is_some() {
-        let file = File::create(state.options.output_file.to_owned().unwrap())?;
-        write_to(state.clone(), &mut BufWriter::new(file))
+    if let Some(mut filename) = state.options.output_file.clone() {
+        for filetype in &state.options.filetypes {
+            filename.push_str(get_file_extension(filetype));
+            let file = File::create(&filename)?;
+            write_to(state.clone(), filetype, &mut BufWriter::new(file))?;
+        }
+        Ok(())
     } else {
-        write_to(state.clone(), &mut BufWriter::new(io::stdout()))
+        write_to(
+            state.clone(),
+            &state.options.filetypes[0],
+            &mut BufWriter::new(io::stdout()),
+        )
     }
 }
 
-fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Result<(), io::Error> {
-    match state.options.filetype {
+fn write_to<W: Write>(
+    state: Arc<RenderState>,
+    filetype: &FileType,
+    writer: &mut W,
+) -> Result<(), io::Error> {
+    match filetype {
         FileType::bmp => bitmap::write_to(state.clone(), writer),
         FileType::heightfield => heightfield::write_to(state.clone(), writer),
         FileType::ppm => ppm::write_to(state.clone(), writer),

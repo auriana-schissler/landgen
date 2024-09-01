@@ -27,23 +27,22 @@ fn full_test_run() {
     use std::path::Path;
     let color_file_path = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("src")
-        .join("color")
+        .join("color_files")
         .join("olsson.col")
         .to_str()
         .unwrap()
         .to_string();
 
     let args = Args {
-        height: 500,
-        width: 500,
+        height: 1000,
+        width: 1000,
         projection: "m".into(),
         longitude: -130.,
         latitude: 0.,
-        magnification: 1.1,
+        magnification: 1.,
         color_filename: color_file_path,
-        use_bumpmap: false,
         seed: 0.7609952,
-        output_file: Some("./test_output.png".to_string()),
+        output_file: Some("./test_output".to_string()),
         draw_daylight: false,
         calculate_rainfall: false,
         latitude_color: 0,
@@ -51,11 +50,12 @@ fn full_test_run() {
         use_xpm_format: false,
         use_ppm_format: false,
         use_heightfield_format: false,
-        use_png_format: true,
+        use_png_format: false,
+        use_bmp_format: true,
         map_rotation: vec![0., 0.],
-        altitude_variation: false,
+        altitude_variation: 0.45,
         use_delta_map: None,
-        distance_variation: false,
+        distance_variation: 0.035,
         light_longitude: 0.,
         light_latitude: 0.,
         draw_land_edge: None,
@@ -65,11 +65,12 @@ fn full_test_run() {
         longitude_gridsize: 0.,
         latitude_gridsize: 0.,
         use_temperature: false,
-        use_land_only_bumpmap: false,
+        use_bumpmap: false,
+        use_land_only_bumpmap: true,
         use_nonlinear_altitude_scaling: false,
         help: None,
         version: None,
-        render_threads: 12,
+        render_threads: 8,
     };
 
     render::execute(args);
@@ -193,32 +194,38 @@ struct Args {
     draw_daylight: bool,
 
     /// Angle of “light” in bumpmap shading or longitude of sun in daylight shading.
-    #[arg(short = 'a', value_name = "longitude", default_value_t = 150.0)]
+    #[arg(short = 'a', value_name = "longitude", allow_negative_numbers = true, default_value_t = 150.0)]
     light_longitude: f64,
 
     /// Latitude of sun in daylight shading.
-    #[arg(short = 'A', value_name = "latitude", default_value_t = 20.0)]
+    #[arg(short = 'A', value_name = "latitude", allow_negative_numbers = true, default_value_t = 20.0)]
     light_latitude: f64,
 
-    /// Output as PPM file format. (Default is bitmap)
+    /// Output as PPM file format.
     #[arg(
-        short = 'P', default_value_t = false, conflicts_with_all = ["use_xpm_format", "use_heightfield_format", "use_png_format"]
+        short = 'P', default_value_t = false
     )]
     use_ppm_format: bool,
 
-    /// Output as XPM file format. (Default is bitmap)
+    /// Output as XPM file format.
     #[arg(
-        short = 'x', default_value_t = false, conflicts_with_all = ["use_ppm_format", "use_heightfield_format", "use_png_format"]
+        short = 'x', default_value_t = false
     )]
     use_xpm_format: bool,
 
-    /// Output as PNG file format. (Default is bitmap)
+    /// Output as PNG file format.
     #[arg(
-        long = "png", default_value_t = false, conflicts_with_all = ["use_xpm_format", "use_heightfield_format", "use_ppm_format"]
+        long = "png", default_value_t = false
     )]
     use_png_format: bool,
 
-    /// Output as heightfield format. (Default is bitmap)
+    /// Output as bitmap file format.
+    #[arg(
+        long = "bmp", default_value_t = false
+    )]
+    use_bmp_format: bool,
+
+    /// Output as heightfield format.
     #[arg(short = 'H', default_value_t = false)]
     use_heightfield_format: bool,
 
@@ -227,12 +234,12 @@ struct Args {
     use_delta_map: Option<f64>,
 
     /// Distance contribution to variation.
-    #[arg(short = 'V', default_value_t = false)]
-    distance_variation: bool,
+    #[arg(short = 'V', default_value_t = 0.035_f64)]
+    distance_variation: f64,
 
     /// Altitude contribution to variation.
-    #[arg(short = 'v', default_value_t = false)]
-    altitude_variation: bool,
+    #[arg(short = 'v', default_value_t = 0.45_f64)]
+    altitude_variation: f64,
 
     /// Rotate map so what would otherwise be at latitude and longitude is moved to (0,0).
     /// This is different from using -l and -L because this rotation is done before applying
@@ -256,7 +263,7 @@ struct Args {
     ///     a : Area preserving azimuthal
     ///     c : Conical (conformal)
     ///     M : Mollweide
-    ///     S : Sinusoidal
+    ///     S : Sinusoidal (non-functional)
     ///     i : Icosahedral
     ///
     #[arg(
