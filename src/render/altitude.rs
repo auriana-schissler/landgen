@@ -252,11 +252,20 @@ pub fn execute(
                 } else {
                     /* add bumpmap effect */
                     x1 = 0.25 * (tetra.a.x + tetra.b.x + tetra.c.x + tetra.d.x);
-                    x1 = calc_bump_point(tetra, x1);
+                    x1 = tetra.a.altitude * (x1 - tetra.a.x)
+                       + tetra.b.altitude * (x1 - tetra.b.x)
+                       + tetra.c.altitude * (x1 - tetra.c.x)
+                       + tetra.d.altitude * (x1 - tetra.d.x);
                     y1 = 0.25 * (tetra.a.y + tetra.b.y + tetra.c.y + tetra.d.y);
-                    y1 = calc_bump_point(tetra, y1);
+                    y1 = tetra.a.altitude * (y1 - tetra.a.y)
+                       + tetra.b.altitude * (y1 - tetra.b.y)
+                       + tetra.c.altitude * (y1 - tetra.c.y)
+                       + tetra.d.altitude * (y1 - tetra.d.y);
                     z1 = 0.25 * (tetra.a.z + tetra.b.z + tetra.c.z + tetra.d.z);
-                    z1 = calc_bump_point(tetra, z1);
+                    z1 = tetra.a.altitude * (z1 - tetra.a.z)
+                       + tetra.b.altitude * (z1 - tetra.b.z)
+                       + tetra.c.altitude * (z1 - tetra.c.z)
+                       + tetra.d.altitude * (z1 - tetra.d.z);
                     l1 = 5.0 * (x1 * x1 + y1 * y1 + z1 * z1).sqrt();
                     x1 += p.x * l1;
                     y1 += p.y * l1;
@@ -283,12 +292,4 @@ pub fn execute(
                 + tetra.d.rain_shadow);
         0.25 * (tetra.a.altitude + tetra.b.altitude + tetra.c.altitude + tetra.d.altitude)
     }
-}
-
-#[inline(always)]
-fn calc_bump_point(t: &Tetra, p: f64) -> f64 {
-    t.a.altitude * (p - t.a.x)
-        + t.b.altitude * (p - t.b.x)
-        + t.c.altitude * (p - t.c.x)
-        + t.d.altitude * (p - t.d.x)
 }
