@@ -380,3 +380,5 @@ fn test_olsson_color_file_interpolation() {
     assert_eq!(table[51].green, 136);
     assert_eq!(table[51].blue, 34);
 }
+
+// TODO: Embed color files automatically

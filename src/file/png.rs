@@ -14,7 +14,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     let _cmdline = get_commandline_footer();
 
     let mut header = Header::new();
-    header.set_size(state.options.width as u32, state.options.height as u32)?;
+    header.set_size(state.options.slicing.width as u32, state.options.slicing.height as u32)?;
     header.set_color(ColorType::Truecolor, 8)?;
 
     let mut options = Options::new();
@@ -28,8 +28,8 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
 
     let canvas = state.canvas.read().unwrap();
     
-    let height = state.options.height as usize;
-    let width = state.options.width as usize;
+    let height = state.options.slicing.height;
+    let width = state.options.slicing.width;
     let mut line: Vec<u8> = Vec::with_capacity(height * width * 3);
     for v in canvas.iter() {
         for h in v.iter() {

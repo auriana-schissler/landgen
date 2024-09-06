@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 fn get_file_size(state: Arc<RenderState>) -> u64 {
     let (bpp, _, pixel_data_start) = get_bitmap_info(state.clone());
-    let padded_width = ((state.options.width + 31) & 0b_1111_1111_1110_0000) as u64;
+    let padded_width = ((state.options.slicing.width + 31) & 0b_1111_1111_1110_0000) as u64;
     get_commandline_footer().len() as u64
         + pixel_data_start as u64
-        + (padded_width * state.options.height as u64 * bpp as u64) / 8
+        + (padded_width * state.options.slicing.height as u64 * bpp as u64) / 8
 }
 
 pub fn validate_size(state: Arc<RenderState>) -> bool {
@@ -20,8 +20,8 @@ pub fn validate_size(state: Arc<RenderState>) -> bool {
 // Returns a width padded to 4 byte boundaries
 fn get_padded_width(state: Arc<RenderState>) -> u32 {
     match state.get_color_mode() {
-        ColorMode::Color => (state.options.width as u32 + 3) & 0b_1111_1111_1111_1100,
-        ColorMode::Monochrome => (state.options.width as u32 + 31) & 0b_1111_1111_1110_0000,
+        ColorMode::Color => (state.options.slicing.width as u32 + 3) & 0b_1111_1111_1111_1100,
+        ColorMode::Monochrome => (state.options.slicing.width as u32 + 31) & 0b_1111_1111_1110_0000,
     }
 }
 
@@ -41,7 +41,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     let (bpp, colors, pixel_data_start) = get_bitmap_info(state.clone());
     let filesize = cmdline.len() as u32
         + pixel_data_start as u32
-        + padded_width * state.options.height as u32 / 8;
+        + padded_width * state.options.slicing.height as u32 / 8;
 
     writer.write_all(&filesize.to_le_bytes())?;
     writer.write_all(&[
@@ -58,8 +58,8 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
         0,
         0, // info header size
     ])?;
-    writer.write_all(&(state.options.width as u32).to_le_bytes())?;
-    writer.write_all(&(state.options.height as u32).to_le_bytes())?;
+    writer.write_all(&(state.options.slicing.width as u32).to_le_bytes())?;
+    writer.write_all(&(state.options.slicing.height as u32).to_le_bytes())?;
     writer.write_all(&[
         1u8, 0, // number of planes (1)
         bpp, 0, // bits per pixel
@@ -98,7 +98,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
                             (shade * color.red as u32 / 150).min(255) as u8,
                         ])?;
                     }
-                    for _ in state.options.width as u32..padded_width {
+                    for _ in state.options.slicing.width as u32..padded_width {
                         writer.write_all(&[0])?;
                     }
                 }
@@ -107,14 +107,14 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
         ColorMode::Monochrome => {
             // we fit 32 pixels per 4 byte cluster
             for v in (0..canvas.len()).rev() {
-                for h in (0..state.options.height).rev() {
+                for h in (0..state.options.slicing.height).rev() {
                     for w in (0..padded_width).step_by(32) {
                         let mut quad = 0u32;
-                        let stop = (state.options.width as u32 - w).min(32);
+                        let stop = (state.options.slicing.width as u32 - w).min(32);
 
                         for s in 0..stop {
-                            let color_index = canvas[v][(w + s) as usize][h as usize] as usize;
-                            if (w + s) < state.options.width as u32
+                            let color_index = canvas[v][(w + s) as usize][h] as usize;
+                            if (w + s) < state.options.slicing.width as u32
                                 && state.color_table[color_index].red != 0
                             {
                                 quad |= 0b1 << (31 - s);

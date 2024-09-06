@@ -1,4 +1,6 @@
-#[derive(Clone)]
+use crate::render::RenderOptions;
+
+#[derive(Copy, Clone)]
 pub struct Vertex {
     pub altitude: f64,
     pub seed: f64,
@@ -95,5 +97,42 @@ impl Tetra {
             c: self.c.sub(&rhs.c),
             d: self.d.sub(&rhs.d),
         }
+    }
+}
+
+pub fn create_base_tetra(options: &RenderOptions) -> Tetra {
+    Tetra {
+        a: Vertex {
+            x: -3.0_f64.sqrt() - 0.20,
+            y: -3.0_f64.sqrt() - 0.22,
+            z: -3.0_f64.sqrt() - 0.23,
+            seed: options.seeds.ss1,
+            altitude: options.initial_altitude,
+            rain_shadow: 0.,
+        },
+        b: Vertex {
+            x: -3.0_f64.sqrt() - 0.19,
+            y: 3.0_f64.sqrt() + 0.18,
+            z: 3.0_f64.sqrt() + 0.17,
+            seed: options.seeds.ss2,
+            altitude: options.initial_altitude,
+            rain_shadow: 0.,
+        },
+        c: Vertex {
+            x: 3.0_f64.sqrt() + 0.21,
+            y: -3.0_f64.sqrt() - 0.24,
+            z: 3.0_f64.sqrt() + 0.15,
+            seed: options.seeds.ss3,
+            altitude: options.initial_altitude,
+            rain_shadow: 0.,
+        },
+        d: Vertex {
+            x: 3.0_f64.sqrt() + 0.24,
+            y: 3.0_f64.sqrt() + 0.22,
+            z: -3.0_f64.sqrt() - 0.25,
+            seed: options.seeds.ss4,
+            altitude: options.initial_altitude,
+            rain_shadow: 0.,
+        },
     }
 }

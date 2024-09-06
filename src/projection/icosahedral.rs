@@ -3,32 +3,34 @@ use crate::render::color::render_pixel;
 use crate::render::{commit_render_data, RenderState, ThreadState};
 use crate::terrain::LatLong;
 use chrono::prelude::*;
-use std::rc::Rc;
 use std::sync::Arc;
 
-pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
-    let options = Rc::new(render_state.options.clone());
-    let mut thread_state = ThreadState::new(thread_id, options.clone());
+pub fn render(thread_id: u8, render_state: Arc<RenderState>) {
+    let mut state = ThreadState::new(thread_id, render_state.options.clone());
 
-    let scale = options.scale;
-    let p = &options.center_point;
+    let i_height = state.options.slicing.height as i32;
+    let f_height = state.options.slicing.height as f64;
+    let width = state.options.slicing.width;
+    let i_width = state.options.slicing.width as i32;
+    let f_width = width as f64;
+    let scale = state.options.scale;
+    let cp = state.options.center_point.clone();
+    let scaled_width = f_width * scale;
 
-    thread_state.starting_subdivision_depth =
-        ((scale * options.height as f64).log2() * 3. + 6.) as u8;
+    state.starting_subdivision_depth = ((scale * f_height).log2() * 3. + 6.) as u8;
     let time = Utc::now();
 
     let sq3 = 3.0_f64.sqrt();
     let l1 = 10.812317; /* theoretically 10.9715145571469; */
     let l2 = -52.622632; /* theoretically -48.3100310579607; */
-    //let l2 = -48.3100310579607;
     let s = 55.6;
 
-    for h in 0..thread_state.local_height as i32 {
-        let real_h = h + thread_state.starting_line as i32;
-        for w in 0..options.width {
-            let x0 = 198. * (2 * w - options.width) as f64 / (options.width as f64 * scale) - 36.;
-            let y0 = 198. * (2 * real_h - options.height) as f64 / options.width as f64 / scale
-                - p.latitude / 1.0_f64.to_radians();
+    for h in 0..state.local_height {
+        let real_h = state.options.slicing.get_absolute_height(thread_id, h) as i32;
+        for w in 0..width {
+            let x0 = 198. * (2 * w as i32 - i_width) as f64 / scaled_width - 36.;
+            let y0 = 198. * (2 * real_h - i_height) as f64 / scaled_width
+                - cp.latitude / 1.0_f64.to_radians();
 
             let y3 = y0 / sq3;
             let (lat, long) = match y3 {
@@ -65,16 +67,16 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
             };
 
             if lat > 400. {
-                thread_state.canvas[h as usize][w as usize] = thread_state.color_table.back;
-                if options.shading_level > 0 {
-                    thread_state.shading[h as usize][w as usize] = 255;
+                state.canvas[h][w] = state.color_table.back;
+                if state.options.shading_level > 0 {
+                    state.shading[h][w] = 255;
                 }
             } else {
                 let mut x = (x0 - long) / s;
                 let mut y = (y0 + lat) / s;
 
                 let point =
-                    LatLong::new_with_trig(lat.to_radians(), long.to_radians() - p.longitude);
+                    LatLong::new_with_trig(lat.to_radians(), long.to_radians() - cp.longitude);
 
                 let zz = (1. / (1. + x * x + y * y)).sqrt();
                 x *= zz;
@@ -90,14 +92,14 @@ pub fn render(thread_id: usize, render_state: Arc<RenderState>) {
                         + point.long_cos * point.lat_sin * y
                         + point.long_cos * point.lat_cos * z,
                 );
-                render_pixel(&mut thread_state, &world_point, w as usize, h as usize);
+                render_pixel(&mut state, &world_point, w, h);
             }
         }
         if h > 0 && h % 100 == 0 {
             let millis = (Utc::now() - time).num_milliseconds();
-            let pixels_per_second = (h as i64 * options.width as i64) / millis * 1000;
+            let pixels_per_second = (h * width) as i64 / millis * 1000;
             println!("Thread {thread_id} completed line {h} - {pixels_per_second}pps",);
         }
     }
-    commit_render_data(thread_id, thread_state, render_state.clone());
+    commit_render_data(thread_id, state, render_state.clone());
 }

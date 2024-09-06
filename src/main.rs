@@ -37,6 +37,7 @@ fn full_test_run() {
         height: 1000,
         width: 1000,
         projection: "m".into(),
+        precision: "oooo".into(),
         longitude: -130.,
         latitude: 0.,
         magnification: 1.,
@@ -50,7 +51,7 @@ fn full_test_run() {
         use_xpm_format: false,
         use_ppm_format: false,
         use_heightfield_format: false,
-        use_png_format: false,
+        use_png_format: true,
         use_bmp_format: true,
         map_rotation: vec![0., 0.],
         altitude_variation: 0.45,
@@ -58,15 +59,17 @@ fn full_test_run() {
         distance_variation: 0.035,
         light_longitude: 0.,
         light_latitude: 0.,
-        draw_land_edge: None,
-        draw_outline_map: None,
+        draw_coastline: false,
+        draw_outline_map: false,
+        land_contour_lines: 2,
+        water_contour_lines: 2,
         make_wrinkly_map: false,
         initial_altitude: -0.02,
         longitude_gridsize: 0.,
         latitude_gridsize: 0.,
         use_temperature: false,
         use_bumpmap: false,
-        use_land_only_bumpmap: true,
+        use_land_only_bumpmap: false,
         use_nonlinear_altitude_scaling: false,
         help: None,
         version: None,
@@ -95,18 +98,20 @@ struct Args {
 
     /// Width in pixels
     #[arg(short = 'w', value_name = "width", default_value_t = 800)]
-    width: u32,
+    width: usize,
 
     /// Height in pixels
     #[arg(short = 'h', value_name = "height", default_value_t = 600)]
-    height: u32,
+    height: usize,
 
     /// Magnification level
     #[arg(short = 'm', value_name = "zoom", default_value_t = 1.0)]
     magnification: f64,
 
     /// Number of threads (1-255) used to render
-    #[arg(long = "threads", value_name = "render-threads", default_value_t = 1)]
+    #[arg(long = "threads", 
+    value_name = "render-threads",
+    default_value_t = 1)]
     render_threads: u8,
 
     /// Output file path. Outputs to standard output if missing
@@ -165,21 +170,25 @@ struct Args {
     #[arg(short = 'S', default_value_t = false)]
     make_wrinkly_map: bool,
 
-    /// Read colour definitions from file.
+    /// Read color definitions from file.
     #[arg(short = 'C', value_name = "filename", default_value = "Olsson.col")]
     color_filename: String,
 
-    /// Produce a black and white outline map. Ignores color file. Can optionally specify a contour line count to render.
-    #[arg(
-        short = 'O', value_name = "lines", num_args = 0..=1, required = false, default_missing_value = "0"
-    )]
-    draw_outline_map: Option<u8>,
+    /// Ignores all colors but black(0) and white(1) on the color file.
+    #[arg(short = 'O', requires = "draw_coastline", default_value_t = false)]
+    draw_outline_map: bool,
 
-    /// Outlines land in the color map's black value. Can optionally specify a contour line count to render.
-    #[arg(
-        short = 'E', value_name = "lines", num_args = 0..=1, required = false, default_missing_value = "0"
-    )]
-    draw_land_edge: Option<u8>,
+    /// Draws coastlines in the color map's black value.
+    #[arg(short = 'E', default_value_t = false)]
+    draw_coastline: bool,
+
+    /// Draws a number of contour lines on land
+    #[arg(long = "land-lines", value_name = "land-lines", default_value_t = 0)]
+    land_contour_lines: u16,
+
+    /// Draws a number of contour lines on water
+    #[arg(long = "water-lines", value_name = "water-lines", default_value_t = 0)]
+    water_contour_lines: u16,
 
     /// Use bumpmap shading. Land and water.
     #[arg(short = 'B', default_value_t = false)]
@@ -252,6 +261,10 @@ struct Args {
     /// Show biomes
     #[arg(short = 'z', default_value_t = false)]
     show_biomes: bool,
+    
+    // Specify the randomness precision with Original (o), Normal (n), or High (h).
+    #[arg(long = "precision", default_value = "oooo")]
+    precision: String,
 
     /// Specifies projection:
     ///     m = Mercator

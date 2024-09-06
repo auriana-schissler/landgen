@@ -36,8 +36,9 @@ pub fn get_file_extension<'a>(filetype: &FileType) -> &'a str {
 }
 
 pub fn write_file(state: Arc<RenderState>) -> Result<(), io::Error> {
-    if let Some(mut filename) = state.options.output_file.clone() {
+    if let Some(filename) = state.options.output_file.clone() {
         for filetype in &state.options.filetypes {
+            let mut filename = filename.to_owned();
             filename.push_str(get_file_extension(filetype));
             let file = File::create(&filename)?;
             write_to(state.clone(), filetype, &mut BufWriter::new(file))?;

@@ -12,7 +12,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     writeln!(
         writer,
         "{} {} 255",
-        state.options.width, state.options.height
+        state.options.slicing.width, state.options.slicing.height
     )?;
 
     let shading = state.shading.read().unwrap();

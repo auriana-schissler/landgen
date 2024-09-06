@@ -1,25 +1,29 @@
 use crate::color::{build_color_data, ColorTable};
 use crate::file::bitmap::validate_size;
 use crate::file::{write_file, ColorMode, FileType};
-use crate::geometry::{Tetra, Vertex};
-use crate::math::rand_low;
+use crate::geometry::Tetra;
 use crate::terrain::LatLong;
 use crate::util::Vec2D;
 use crate::{projection, Args};
 use chrono::Utc;
 use std::f64::consts::PI;
-use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::thread;
+use gridlines::GridLines;
+use slicing::Slicing;
+use crate::math::{RenderSeeds, SeedGenerator};
+use crate::projection::ProjectionMode;
 
 mod altitude;
 pub mod color;
+mod slicing;
+mod gridlines;
 
 #[derive(Clone)]
 pub struct RenderOptions {
-    pub seed: f64,
-    pub width: i32,
-    pub height: i32,
+    pub seed_gen: SeedGenerator,
+    pub seeds: RenderSeeds,
+    pub slicing: Slicing,
     pub scale: f64,
     pub output_file: Option<String>,
     pub filetypes: Vec<FileType>,
@@ -31,9 +35,11 @@ pub struct RenderOptions {
     pub use_nonlinear_altitude_scaling: bool,
     pub make_wrinkly_map: bool,
     pub color_filename: String,
-    pub draw_outline_map: Option<u8>,
-    pub draw_land_edge: Option<u8>,
-    pub daylight: LatLong,
+    pub draw_outline_map: bool,
+    pub draw_coastline: bool,
+    pub land_contour_lines: u16,
+    pub water_contour_lines: u16,
+    pub light: LatLong,
     pub delta_map: Option<f64>,
     pub map_rotation: LatLong,
     pub show_biomes: bool,
@@ -47,7 +53,6 @@ pub struct RenderOptions {
     pub alt_diff_power: f64,
     pub distance_weight: f64,
     pub distance_power: f64,
-    pub render_threads: usize,
 }
 
 impl RenderOptions {
@@ -94,10 +99,12 @@ impl Args {
             self.map_rotation[1] -= 360.0;
         }
 
+        let seed_gen = SeedGenerator::new(&self.precision);
+        
         RenderOptions {
-            seed: self.seed,
-            width: self.width as i32,
-            height: self.height as i32,
+            seeds: seed_gen.generate(self.seed),
+            seed_gen,            
+            slicing: Slicing::new(self.height, self.width, self.render_threads),
             scale: self.magnification.clamp(0.1, 100_000.0),
             output_file: self.output_file.clone(),
             filetypes: RenderOptions::get_filetypes(&self),
@@ -113,8 +120,10 @@ impl Args {
             make_wrinkly_map: self.make_wrinkly_map,
             color_filename: self.color_filename.clone(),
             draw_outline_map: self.draw_outline_map,
-            draw_land_edge: self.draw_land_edge,
-            daylight: LatLong::new(self.light_latitude, self.light_longitude),
+            draw_coastline: self.draw_coastline,
+            land_contour_lines: self.land_contour_lines,
+            water_contour_lines: self.water_contour_lines,
+            light: LatLong::new(self.light_latitude, self.light_longitude),
             delta_map: self.use_delta_map,
             map_rotation: LatLong::new(
                 -self.map_rotation[0].to_radians(),
@@ -123,7 +132,7 @@ impl Args {
             show_biomes: self.show_biomes,
             projection: match self.projection.as_str() {
                 "m" => {
-                    if self.latitude.abs() >= PI - 1E-10 {
+                    if self.latitude.to_radians().abs() >= PI - 1E-10 {
                         ProjectionMode::Stereographic
                     } else {
                         ProjectionMode::Mercator
@@ -167,62 +176,7 @@ impl Args {
             alt_diff_power: if self.make_wrinkly_map { 0.75 } else { 1.0 },
             distance_weight: self.distance_variation,
             distance_power: 0.47,
-            render_threads: self.render_threads as usize,
         }
-    }
-}
-
-pub struct GridLines {
-    pub x: Vec2D<f64>,
-    pub y: Vec2D<f64>,
-    pub z: Vec2D<f64>,
-}
-
-impl GridLines {
-    pub fn new(height: u32, width: u32) -> Self {
-        Self {
-            x: vec![vec! {0.0; width as usize}; height as usize],
-            y: vec![vec! {0.0; width as usize}; height as usize],
-            z: vec![vec! {0.0; width as usize}; height as usize],
-        }
-    }
-}
-
-fn create_base_tetra(options: Rc<RenderOptions>) -> Tetra {
-    let seeds = RenderSeeds::new(options.seed);
-    Tetra {
-        a: Vertex {
-            x: -3.0_f64.sqrt() - 0.20,
-            y: -3.0_f64.sqrt() - 0.22,
-            z: -3.0_f64.sqrt() - 0.23,
-            seed: seeds.ss1,
-            altitude: options.initial_altitude,
-            rain_shadow: 0.,
-        },
-        b: Vertex {
-            x: -3.0_f64.sqrt() - 0.19,
-            y: 3.0_f64.sqrt() + 0.18,
-            z: 3.0_f64.sqrt() + 0.17,
-            seed: seeds.ss2,
-            altitude: options.initial_altitude,
-            rain_shadow: 0.,
-        },
-        c: Vertex {
-            x: 3.0_f64.sqrt() + 0.21,
-            y: -3.0_f64.sqrt() - 0.24,
-            z: 3.0_f64.sqrt() + 0.15,
-            seed: seeds.ss3,
-            altitude: options.initial_altitude,
-            rain_shadow: 0.,
-        },
-        d: Vertex {
-            x: 3.0_f64.sqrt() + 0.24,
-            y: 3.0_f64.sqrt() + 0.22,
-            z: -3.0_f64.sqrt() - 0.25,
-            seed: seeds.ss4,
-            altitude: options.initial_altitude,
-            rain_shadow: 0.,
-        },
     }
 }
 
@@ -241,14 +195,14 @@ impl RenderState {
     pub fn new(options: RenderOptions) -> Self {
         Self {
             options: options.clone(),
-            canvas: RwLock::new(vec![vec![]; options.render_threads]),
+            canvas: RwLock::new(vec![vec![]; options.slicing.slice_count as usize]),
             heightfield: RwLock::new(if options.generate_heightfield {
-                vec![vec![]; options.render_threads]
+                vec![vec![]; options.slicing.slice_count as usize]
             } else {
                 vec![]
             }),
             shading: RwLock::new(if options.shading_level > 0 {
-                vec![vec![]; options.render_threads]
+                vec![vec![]; options.slicing.slice_count as usize]
             } else {
                 vec![]
             }),
@@ -269,8 +223,7 @@ impl RenderState {
 }
 
 pub struct ThreadState {
-    pub options: Rc<RenderOptions>,
-    pub starting_line: usize,
+    pub options: RenderOptions,
     pub local_height: usize,
     pub canvas: Vec2D<u16>,
     pub heightfield: Vec2D<i32>,
@@ -285,79 +238,47 @@ pub struct ThreadState {
 }
 
 impl ThreadState {
-    pub fn new(id: usize, options: Rc<RenderOptions>) -> Self {
-        let height_segment_size =
-            (options.height as f64 / options.render_threads as f64).ceil() as usize;
-        let starting_line = id * height_segment_size;
-        let local_height = height_segment_size.min(options.height as usize - starting_line);
-        let starting_subdivision_depth = 0;
+    pub fn new(id: u8, options: RenderOptions) -> Self {
         Self {
             options: options.clone(),
-            starting_line,
-            local_height,
-            canvas: vec![vec![0; options.width as usize]; local_height],
-            heightfield: gen_heightfield(id, options.clone()),
-            shading: gen_shading(id, options.clone()),
+            local_height: options.slicing.get_slice_height(id),
+            canvas: gen_canvas(id, &options),
+            heightfield: gen_heightfield(id, &options),
+            shading: gen_shading(id, &options),
             color_table: build_color_data(&options),
             search_map: [[0; 30]; 60],
-            base_tetra: create_base_tetra(options.clone()),
-            cached_tetra: create_base_tetra(options.clone()),
-            starting_subdivision_depth,
+            base_tetra: crate::geometry::create_base_tetra(&options),
+            cached_tetra: crate::geometry::create_base_tetra(&options),
+            starting_subdivision_depth: 0,
             rain_shadow: 0.0,
             shade: 0,
         }
     }
 }
 
-fn gen_heightfield(id: usize, options: Rc<RenderOptions>) -> Vec2D<i32> {
-    let height_segment_size =
-        (options.height as f64 / options.render_threads as f64).ceil() as usize;
-    let starting_line = id * height_segment_size;
-    let local_height = height_segment_size.min(options.height as usize - starting_line);
-    if options.generate_heightfield {
-        vec![vec![0; options.width as usize]; local_height]
+fn gen_canvas(id: u8, options: &RenderOptions) -> Vec2D<u16> {
+    if !options.filetypes.contains(&FileType::heightfield) || options.filetypes.len() > 1 {
+        vec![vec![0; options.slicing.width]; options.slicing.get_slice_height(id)]
     } else {
         vec![]
     }
 }
 
-fn gen_shading(id: usize, options: Rc<RenderOptions>) -> Vec2D<u8> {
-    let height_segment_size =
-        (options.height as f64 / options.render_threads as f64).ceil() as usize;
-    let starting_line = id * height_segment_size;
-    let local_height = height_segment_size.min(options.height as usize - starting_line);
+fn gen_heightfield(id: u8, options: &RenderOptions) -> Vec2D<i32> {
+    if options.generate_heightfield {
+        vec![vec![0; options.slicing.width]; options.slicing.get_slice_height(id)]
+    } else {
+        vec![]
+    }
+}
+
+fn gen_shading(id: u8, options: &RenderOptions) -> Vec2D<u8> {
     if (!options.filetypes.contains(&FileType::heightfield) || options.filetypes.len() > 1)
         && options.shading_level > 0
     {
-        vec![vec![0; options.width as usize]; local_height]
+        vec![vec![0; options.slicing.width]; options.slicing.get_slice_height(id)]
     } else {
         vec![]
-    }
-}
-
-#[derive(Clone)]
-struct RenderSeeds {
-    pub base: f64,
-    pub ss1: f64,
-    pub ss2: f64,
-    pub ss3: f64,
-    pub ss4: f64,
-}
-
-impl RenderSeeds {
-    pub fn new(seed: f64) -> Self {
-        let ss1 = rand_low(seed, seed);
-        let ss2 = rand_low(ss1, ss1);
-        let ss3 = rand_low(ss1, ss2);
-        let ss4 = rand_low(ss2, ss3);
-
-        Self {
-            base: seed,
-            ss1,
-            ss2,
-            ss3,
-            ss4,
-        }
     }
 }
 
@@ -366,11 +287,10 @@ pub fn execute(args: Args) {
     let state = Arc::new(RenderState::new(options.clone()));
 
     validate_size(state.clone());
-    println!("Starting render");
     let now = Utc::now();
 
     thread::scope(|scope| {
-        for thread_id in 0..options.render_threads {
+        for thread_id in 0..options.slicing.slice_count {
             println!("Spawning thread {thread_id}");
             let state = state.clone();
             scope.spawn(move || {
@@ -410,7 +330,7 @@ pub fn execute(args: Args) {
         }
     });
 
-    // make grid lines
+    gridlines::generate_gridlines(state.clone());
 
     smooth_shading(state.clone());
 
@@ -420,7 +340,7 @@ pub fn execute(args: Args) {
 }
 
 pub fn commit_render_data(
-    thread_id: usize,
+    thread_id: u8,
     thread_state: ThreadState,
     render_state: Arc<RenderState>,
 ) {
@@ -429,7 +349,7 @@ pub fn commit_render_data(
         .filetypes
         .contains(&FileType::heightfield)
     {
-        render_state.heightfield.write().unwrap()[thread_id] = thread_state.heightfield;
+        render_state.heightfield.write().unwrap()[thread_id as usize] = thread_state.heightfield;
     }
 
     if !thread_state
@@ -438,17 +358,49 @@ pub fn commit_render_data(
         .contains(&FileType::heightfield)
         || thread_state.options.filetypes.len() > 1
     {
-        render_state.canvas.write().unwrap()[thread_id] = thread_state.canvas;
+        render_state.canvas.write().unwrap()[thread_id as usize] = thread_state.canvas;
         if thread_state.options.shading_level > 0 {
-            render_state.shading.write().unwrap()[thread_id] = thread_state.shading;
+            render_state.shading.write().unwrap()[thread_id as usize] = thread_state.shading;
         }
     }
 }
 
 // TODO: Generate contour lines and outlines
 fn generate_outlines(state: Arc<RenderState>) {
+    let sea_bottom = state.color_table.sea_bottom;
+    let sea_level = state.color_table.sea_level;
+    let lowest_land = state.color_table.lowest_land;
+    let highest_land = state.color_table.highest_land;
 
-    //if state.options
+    let land_contour_step = (highest_land - lowest_land) / (state.options.land_contour_lines + 1);
+    let water_contour_step = (lowest_land - sea_bottom) / 20;
+
+    let canvas = state.canvas.write().unwrap();
+
+    // for h in 1..state.options.height as usize {
+    //     for w in 1..state.options.width as usize {
+    //         //let point = canvas
+    //         // detect line for beaches
+    // 
+    //         if state.options.land_contour_lines > 0 {
+    //             // detect land lines
+    //         }
+    // 
+    //         if state.options.water_contour_lines > 0 {
+    //             // detect water lines
+    //         }
+    // 
+    //         if state.options.draw_outline_map {}
+    //     }
+    // }
+    // 
+    // for h in 0..state.options.height as usize {
+    //     for w in 0..state.options.width as usize {
+    //         // wipe colors
+    //     }
+    // }
+
+    // Apply outlines to canvas
 }
 
 // TODO: Eventually add in map reading (from file or stdin)
@@ -459,51 +411,19 @@ fn smooth_shading(state: Arc<RenderState>) {
     if shading.len() == 0 {
         return;
     }
+    let height_limit = state.options.slicing.height - 1;
+    let width_limit = state.options.slicing.width - 1;
 
-    let last_slice_index = shading.len() - 1;
-    let slice_height_index = shading[0].len() - 1;
-    let width_limit = state.options.width as usize - 2;
-
-    for vi in 0..=last_slice_index {
-        for hi in 0..shading[vi].len() {
-            if vi == last_slice_index && hi == shading[vi].len() - 2 {
-                return; // The final row of the image is not smoothed
-            }
-
-            for wi in 0..shading[vi][hi].len() {
-                if wi >= width_limit {
-                    continue;
-                }
-                let p = 4 * shading[vi][hi][wi] as u16;
-                let w1 = 2 * shading[vi][hi][wi + 1] as u16;
-                let (h1, hw1) = if hi == slice_height_index {
-                    (
-                        2 * shading[vi + 1][0][wi] as u16,
-                        shading[vi + 1][0][wi + 1] as u16,
-                    )
-                } else {
-                    (
-                        2 * shading[vi][hi + 1][wi] as u16,
-                        shading[vi][hi + 1][wi + 1] as u16,
-                    )
-                };
-                shading[vi][hi][wi] = ((p + h1 + w1 + hw1 + 4) / 9).min(255) as u8;
-            }
+    for ahi in 0..height_limit {
+        let (vi, hi) = state.options.slicing.translate_index(ahi);
+        for wi in 0..width_limit {
+            let p = 4 * shading[vi][hi][wi] as u16;
+            let w1 = 2 * shading[vi][hi][wi + 1] as u16;
+            let (vi1, hi1) = state.options.slicing.translate_index(ahi + 1);
+            let h1 =  2 * shading[vi1][hi1][wi] as u16;
+            let hw1 = shading[vi1][hi1][wi + 1] as u16;
+            shading[vi][hi][wi] = ((p + h1 + w1 + hw1 + 4) / 9).min(255) as u8;
         }
     }
 }
 
-#[derive(Clone)]
-pub enum ProjectionMode {
-    Mercator,
-    Peters,
-    Square,
-    Stereographic,
-    Orthographic,
-    Gnomonic,
-    Azimuthal,
-    Conical,
-    Mollweide,
-    Sinusoidal,
-    Icosahedral,
-}

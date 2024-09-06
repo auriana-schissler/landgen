@@ -43,8 +43,8 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     writeln!(
         writer,
         "\"{} {} {} {}\",",
-        state.options.width,
-        state.options.height,
+        state.options.slicing.width,
+        state.options.slicing.height,
         state.color_table.len(),
         chars_per_pixel
     )?;
