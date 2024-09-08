@@ -33,7 +33,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     //Character table for XPM output
     let chars = b"@$.,:;-+=#*&ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     let cmdline = get_commandline_footer();
-    let chars_per_pixel = get_chars_per_pixel(state.color_table.len(), chars);
+    let chars_per_pixel = get_chars_per_pixel(state.options.color_table.len(), chars);
 
     writeln!(writer, "/* XPM */")?;
     writeln!(writer, "/* Command line: */")?;
@@ -45,13 +45,13 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
         "\"{} {} {} {}\",",
         state.options.slicing.width,
         state.options.slicing.height,
-        state.color_table.len(),
+        state.options.color_table.len(),
         chars_per_pixel
     )?;
 
     writeln!(writer, "/* colors */")?;
-    for i in 0..state.color_table.len() {
-        let Color { red, green, blue } = &state.color_table[i];
+    for i in 0..state.options.color_table.len() {
+        let Color { red, green, blue } = &state.options.color_table[i];
         writeln!(writer, "\"{} c #{red:2x}{green:2x}{blue:2x}\",", get_chars(chars, i, chars_per_pixel))?;
     }
 
