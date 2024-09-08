@@ -2,22 +2,34 @@ use crate::color::{build_color_data, ColorTable};
 use crate::file::bitmap::validate_size;
 use crate::file::{write_file, ColorMode, FileType};
 use crate::geometry::Tetra;
+use crate::math::{RenderSeeds, SeedGenerator};
+use crate::projection::azimuthal::Azimuthal;
+use crate::projection::conical::Conical;
+use crate::projection::gnomonic::Gnomonic;
+use crate::projection::icosahedral::Icosahedral;
+use crate::projection::mercator::Mercator;
+use crate::projection::mollweide::Mollweide;
+use crate::projection::orthographic::Orthographic;
+use crate::projection::peters::Peters;
+use crate::projection::sinusoidal::Sinusoidal;
+use crate::projection::square::Square;
+use crate::projection::stereographic::Stereographic;
+use crate::projection::ProjectionMode;
+use crate::render::color::render_pixel;
 use crate::terrain::LatLong;
 use crate::util::Vec2D;
-use crate::{projection, Args};
+use crate::Args;
 use chrono::Utc;
+use gridlines::GridLines;
+use slicing::Slicing;
 use std::f64::consts::PI;
 use std::sync::{Arc, RwLock};
 use std::thread;
-use gridlines::GridLines;
-use slicing::Slicing;
-use crate::math::{RenderSeeds, SeedGenerator};
-use crate::projection::ProjectionMode;
 
-mod altitude;
+pub mod altitude;
 pub mod color;
-mod slicing;
-mod gridlines;
+pub mod gridlines;
+pub mod slicing;
 
 #[derive(Clone)]
 pub struct RenderOptions {
@@ -25,6 +37,7 @@ pub struct RenderOptions {
     pub seeds: RenderSeeds,
     pub slicing: Slicing,
     pub scale: f64,
+    pub color_table: ColorTable,
     pub output_file: Option<String>,
     pub filetypes: Vec<FileType>,
     pub generate_heightfield: bool,
@@ -100,12 +113,13 @@ impl Args {
         }
 
         let seed_gen = SeedGenerator::new(&self.precision);
-        
+
         RenderOptions {
             seeds: seed_gen.generate(self.seed),
-            seed_gen,            
+            seed_gen,
             slicing: Slicing::new(self.height, self.width, self.render_threads),
             scale: self.magnification.clamp(0.1, 100_000.0),
+            color_table: build_color_data(&self.color_filename, self.show_biomes),
             output_file: self.output_file.clone(),
             filetypes: RenderOptions::get_filetypes(&self),
             generate_heightfield: self.use_heightfield_format,
@@ -185,10 +199,7 @@ pub struct RenderState {
     pub canvas: RwLock<Vec<Vec2D<u16>>>,
     pub heightfield: RwLock<Vec<Vec2D<i32>>>,
     pub shading: RwLock<Vec<Vec2D<u8>>>,
-    pub color_table: ColorTable,
-    pub search_map: [[i32; 30]; 60],
     pub grid_lines: GridLines,
-    pub map_match_size: f64,
 }
 
 impl RenderState {
@@ -206,15 +217,12 @@ impl RenderState {
             } else {
                 vec![]
             }),
-            color_table: build_color_data(&options),
-            search_map: [[0; 30]; 60],
             grid_lines: GridLines::new(0, 0),
-            map_match_size: 0.0,
         }
     }
 
     pub fn get_color_mode(&self) -> ColorMode {
-        if self.color_table.is_monochrome() {
+        if self.options.color_table.is_monochrome() {
             ColorMode::Monochrome
         } else {
             ColorMode::Color
@@ -224,11 +232,9 @@ impl RenderState {
 
 pub struct ThreadState {
     pub options: RenderOptions,
-    pub local_height: usize,
     pub canvas: Vec2D<u16>,
     pub heightfield: Vec2D<i32>,
     pub shading: Vec2D<u8>,
-    pub color_table: ColorTable,
     pub search_map: [[i32; 30]; 60],
     pub base_tetra: Tetra,
     pub cached_tetra: Tetra,
@@ -241,11 +247,9 @@ impl ThreadState {
     pub fn new(id: u8, options: RenderOptions) -> Self {
         Self {
             options: options.clone(),
-            local_height: options.slicing.get_slice_height(id),
             canvas: gen_canvas(id, &options),
             heightfield: gen_heightfield(id, &options),
             shading: gen_shading(id, &options),
-            color_table: build_color_data(&options),
             search_map: [[0; 30]; 60],
             base_tetra: crate::geometry::create_base_tetra(&options),
             cached_tetra: crate::geometry::create_base_tetra(&options),
@@ -258,7 +262,10 @@ impl ThreadState {
 
 fn gen_canvas(id: u8, options: &RenderOptions) -> Vec2D<u16> {
     if !options.filetypes.contains(&FileType::heightfield) || options.filetypes.len() > 1 {
-        vec![vec![0; options.slicing.width]; options.slicing.get_slice_height(id)]
+        vec![
+            vec![options.color_table.back; options.slicing.width];
+            options.slicing.get_slice_height(id)
+        ]
     } else {
         vec![]
     }
@@ -276,7 +283,7 @@ fn gen_shading(id: u8, options: &RenderOptions) -> Vec2D<u8> {
     if (!options.filetypes.contains(&FileType::heightfield) || options.filetypes.len() > 1)
         && options.shading_level > 0
     {
-        vec![vec![0; options.slicing.width]; options.slicing.get_slice_height(id)]
+        vec![vec![255; options.slicing.width]; options.slicing.get_slice_height(id)]
     } else {
         vec![]
     }
@@ -294,37 +301,70 @@ pub fn execute(args: Args) {
             println!("Spawning thread {thread_id}");
             let state = state.clone();
             scope.spawn(move || {
-                match state.options.projection {
+                let mut thread_state = ThreadState::new(thread_id, state.options.clone());
+                let (projection, has_per_row_subdivision) = match state.options.projection {
                     ProjectionMode::Azimuthal => {
-                        projection::azimuthal::render(thread_id, state.clone())
+                        (Azimuthal::create(thread_id, &thread_state.options), false)
                     }
                     ProjectionMode::Conical => {
-                        projection::conical::render(thread_id, state.clone())
+                        (Conical::create(thread_id, &thread_state.options), false)
                     }
                     ProjectionMode::Gnomonic => {
-                        projection::gnomonic::render(thread_id, state.clone())
+                        (Gnomonic::create(thread_id, &thread_state.options), false)
                     }
                     ProjectionMode::Icosahedral => {
-                        projection::icosahedral::render(thread_id, state.clone())
+                        (Icosahedral::create(thread_id, &thread_state.options), false)
                     }
                     ProjectionMode::Mercator => {
-                        projection::mercator::render(thread_id, state.clone())
+                        (Mercator::create(thread_id, &thread_state.options), true)
                     }
                     ProjectionMode::Mollweide => {
-                        projection::mollweide::render(thread_id, state.clone())
+                        (Mollweide::create(thread_id, &thread_state.options), true)
                     }
-                    ProjectionMode::Orthographic => {
-                        projection::orthographic::render(thread_id, state.clone())
+                    ProjectionMode::Orthographic => (
+                        Orthographic::create(thread_id, &thread_state.options),
+                        false,
+                    ),
+                    ProjectionMode::Peters => {
+                        (Peters::create(thread_id, &thread_state.options), true)
                     }
-                    ProjectionMode::Peters => projection::peters::render(thread_id, state.clone()),
                     ProjectionMode::Sinusoidal => {
-                        projection::sinusoidal::render(thread_id, state.clone())
+                        (Sinusoidal::create(thread_id, &thread_state.options), true)
                     }
-                    ProjectionMode::Square => projection::square::render(thread_id, state.clone()),
-                    ProjectionMode::Stereographic => {
-                        projection::stereographic::render(thread_id, state.clone())
+                    ProjectionMode::Square => {
+                        (Square::create(thread_id, &thread_state.options), true)
                     }
+                    ProjectionMode::Stereographic => (
+                        Stereographic::create(thread_id, &thread_state.options),
+                        false,
+                    ),
                 };
+                let mut time = Utc::now();
+                let slice_height = thread_state.options.slicing.get_slice_height(thread_id);
+                if !has_per_row_subdivision {
+                    thread_state.starting_subdivision_depth = projection.get_subdivision_depth(0);
+                }
+                for h in 0..slice_height {
+                    let mut needs_subdivision_calc = true;
+                    for w in 0..thread_state.options.slicing.width {
+                        if let Some(world_point) = projection.pixel_to_coordinate(h, w) {
+                            if has_per_row_subdivision && needs_subdivision_calc {
+                                needs_subdivision_calc = false;
+                                thread_state.starting_subdivision_depth =
+                                    projection.get_subdivision_depth(h);
+                            }
+                            render_pixel(&mut thread_state, &world_point, h, w);
+                        }
+                    }
+                    if h > 0 && h % 100 == 0 {
+                        let ms = (Utc::now() - time).num_milliseconds();
+                        let pixels_per_second =
+                            (100_000 * thread_state.options.slicing.width) as i64 / ms;
+                        println!("Thread {thread_id} completed line {h} - {pixels_per_second}pps",);
+                        time = Utc::now()
+                    }
+                }
+                commit_render_data(thread_id, thread_state, state.clone());
                 println!("Ending thread {thread_id}");
             });
         }
@@ -367,10 +407,10 @@ pub fn commit_render_data(
 
 // TODO: Generate contour lines and outlines
 fn generate_outlines(state: Arc<RenderState>) {
-    let sea_bottom = state.color_table.sea_bottom;
-    let sea_level = state.color_table.sea_level;
-    let lowest_land = state.color_table.lowest_land;
-    let highest_land = state.color_table.highest_land;
+    let sea_bottom = state.options.color_table.sea_bottom;
+    let sea_level = state.options.color_table.sea_level;
+    let lowest_land = state.options.color_table.lowest_land;
+    let highest_land = state.options.color_table.highest_land;
 
     let land_contour_step = (highest_land - lowest_land) / (state.options.land_contour_lines + 1);
     let water_contour_step = (lowest_land - sea_bottom) / 20;
@@ -381,19 +421,19 @@ fn generate_outlines(state: Arc<RenderState>) {
     //     for w in 1..state.options.width as usize {
     //         //let point = canvas
     //         // detect line for beaches
-    // 
+    //
     //         if state.options.land_contour_lines > 0 {
     //             // detect land lines
     //         }
-    // 
+    //
     //         if state.options.water_contour_lines > 0 {
     //             // detect water lines
     //         }
-    // 
+    //
     //         if state.options.draw_outline_map {}
     //     }
     // }
-    // 
+    //
     // for h in 0..state.options.height as usize {
     //     for w in 0..state.options.width as usize {
     //         // wipe colors
@@ -420,10 +460,9 @@ fn smooth_shading(state: Arc<RenderState>) {
             let p = 4 * shading[vi][hi][wi] as u16;
             let w1 = 2 * shading[vi][hi][wi + 1] as u16;
             let (vi1, hi1) = state.options.slicing.translate_index(ahi + 1);
-            let h1 =  2 * shading[vi1][hi1][wi] as u16;
+            let h1 = 2 * shading[vi1][hi1][wi] as u16;
             let hw1 = shading[vi1][hi1][wi + 1] as u16;
             shading[vi][hi][wi] = ((p + h1 + w1 + hw1 + 4) / 9).min(255) as u8;
         }
     }
 }
-

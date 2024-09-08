@@ -1,3 +1,5 @@
+use crate::geometry::Vertex;
+
 pub mod azimuthal;
 pub mod conical;
 pub mod gnomonic;
@@ -23,4 +25,9 @@ pub enum ProjectionMode {
     Mollweide,
     Sinusoidal,
     Icosahedral,
+}
+
+pub trait Projector {
+    fn pixel_to_coordinate(&self, h: usize, w: usize) -> Option<Vertex>;
+    fn get_subdivision_depth(&self, h: usize) -> u8;
 }

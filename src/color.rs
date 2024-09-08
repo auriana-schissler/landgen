@@ -1,10 +1,9 @@
-use crate::render::RenderOptions;
 use crate::util::unwrap_or_return;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::ops::{Index, IndexMut};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ColorTable {
     rows: Vec<Color>,
     pub black: u16,
@@ -132,11 +131,11 @@ const E: usize = 'E' as usize - 64;
 const O: usize = 'O' as usize - 64;
 const I: usize = 'I' as usize - 64;
 
-// TODO: use include_str!() to embed color data into the program
-pub fn build_color_data(options: &RenderOptions) -> ColorTable {
-    let mut table = generate_color_data(&options.color_filename);
+// TODO: use include_str!() to embed color data into the program in build script
+pub fn build_color_data(color_filename: &str, show_biomes: bool) -> ColorTable {
+    let mut table = generate_color_data(color_filename);
 
-    if options.show_biomes {
+    if show_biomes {
         let lowest_land = table.lowest_land as usize;
         table[T + lowest_land] = Color::from_colors(210, 210, 210);
         table[G + lowest_land] = Color::from_colors(250, 215, 165);
@@ -358,7 +357,7 @@ fn test_color_file_interpolation() {
 }
 
 #[test]
-fn test_olsson_color_file_interpolation() {
+fn test_specific_color_file_interpolation() {
     use std::env;
 
     let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -380,5 +379,3 @@ fn test_olsson_color_file_interpolation() {
     assert_eq!(table[51].green, 136);
     assert_eq!(table[51].blue, 34);
 }
-
-// TODO: Embed color files automatically

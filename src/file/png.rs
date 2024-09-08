@@ -35,7 +35,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
         for h in v.iter() {
             for w in h.iter() {
                 let color_index = *w as usize;
-                let color = &state.color_table[color_index];
+                let color = &state.options.color_table[color_index];
                 line.push(color.red);
                 line.push(color.green);
                 line.push(color.blue);

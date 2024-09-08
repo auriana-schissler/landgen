@@ -91,7 +91,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
                         } else {
                             150
                         };
-                        let color = &state.color_table[color_index];
+                        let color = &state.options.color_table[color_index];
                         writer.write_all(&[
                             (shade * color.blue as u32 / 150).min(255) as u8,
                             (shade * color.green as u32 / 150).min(255) as u8,
@@ -115,7 +115,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
                         for s in 0..stop {
                             let color_index = canvas[v][(w + s) as usize][h] as usize;
                             if (w + s) < state.options.slicing.width as u32
-                                && state.color_table[color_index].red != 0
+                                && state.options.color_table[color_index].red != 0
                             {
                                 quad |= 0b1 << (31 - s);
                             }

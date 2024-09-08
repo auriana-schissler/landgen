@@ -4,7 +4,7 @@ use crate::render::ThreadState;
 use crate::terrain::biomes;
 
 // planet0()
-pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usize) {
+pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, h: usize, w: usize) {
     let options = thread_state.options.clone();
     let mut alt: f64 = calc_altitude(thread_state, p);
 
@@ -48,7 +48,7 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, w: usize, h: usi
 
     y2 = p.y.powi(8);
 
-    let color_table = &thread_state.color_table;
+    let color_table = &thread_state.options.color_table;
 
     let color = if options.show_biomes {
         let tt = ((rain * 300.0 - 9.0) as i32).clamp(0, 44) as u8;

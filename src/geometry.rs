@@ -1,4 +1,5 @@
 use crate::render::RenderOptions;
+use crate::terrain::LatLong;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
@@ -103,36 +104,45 @@ impl Tetra {
 pub fn create_base_tetra(options: &RenderOptions) -> Tetra {
     Tetra {
         a: Vertex {
-            x: -3.0_f64.sqrt() - 0.20,
-            y: -3.0_f64.sqrt() - 0.22,
-            z: -3.0_f64.sqrt() - 0.23,
+            x: -0.20 - 3.0_f64.sqrt(),
+            y: -0.22 - 3.0_f64.sqrt(),
+            z: -0.23 - 3.0_f64.sqrt(),
             seed: options.seeds.ss1,
             altitude: options.initial_altitude,
             rain_shadow: 0.,
         },
         b: Vertex {
-            x: -3.0_f64.sqrt() - 0.19,
-            y: 3.0_f64.sqrt() + 0.18,
-            z: 3.0_f64.sqrt() + 0.17,
+            x: -0.19 - 3.0_f64.sqrt(),
+            y:  0.18 + 3.0_f64.sqrt(),
+            z:  0.17 + 3.0_f64.sqrt(),
             seed: options.seeds.ss2,
             altitude: options.initial_altitude,
             rain_shadow: 0.,
         },
         c: Vertex {
-            x: 3.0_f64.sqrt() + 0.21,
-            y: -3.0_f64.sqrt() - 0.24,
-            z: 3.0_f64.sqrt() + 0.15,
+            x: 0.21 + 3.0_f64.sqrt(),
+            y: -0.24 - 3.0_f64.sqrt(),
+            z: 0.15 + 3.0_f64.sqrt(),
             seed: options.seeds.ss3,
             altitude: options.initial_altitude,
             rain_shadow: 0.,
         },
         d: Vertex {
-            x: 3.0_f64.sqrt() + 0.24,
-            y: 3.0_f64.sqrt() + 0.22,
-            z: -3.0_f64.sqrt() - 0.25,
+            x: 0.24 + 3.0_f64.sqrt(),
+            y: 0.22 + 3.0_f64.sqrt(),
+            z: -0.25 - 3.0_f64.sqrt(),
             seed: options.seeds.ss4,
             altitude: options.initial_altitude,
             rain_shadow: 0.,
         },
     }
+}
+
+#[inline(always)]
+pub fn common_vertex_from_point(cp: &LatLong, x: &f64, y: &f64, z: &f64) -> Vertex {
+    Vertex::from_point(
+        cp.long_cos * x + cp.long_sin * cp.lat_sin * y + cp.long_sin * cp.lat_cos * z,
+        cp.lat_cos * y - cp.lat_sin * z,
+        -cp.long_sin * x + cp.long_cos * cp.lat_sin * y + cp.long_cos * cp.lat_cos * z,
+    )
 }
