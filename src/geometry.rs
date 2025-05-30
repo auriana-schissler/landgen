@@ -81,6 +81,12 @@ pub struct Tetra {
     pub d: Vertex,
 }
 
+impl Default for Tetra {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Tetra {
     pub fn new() -> Self {
         Self::with_points(Vertex::new(), Vertex::new(), Vertex::new(), Vertex::new())

@@ -32,7 +32,7 @@ pub fn distance_squared(a: &Vertex, b: &Vertex) -> f64 {
 }
 
 #[derive(Clone)]
-pub(crate) struct SeedGenerator {
+pub struct SeedGenerator {
     pub pre1: RandPrecision,
     pub pre2: RandPrecision,
     pub pre3: RandPrecision,
@@ -87,7 +87,7 @@ impl SeedGenerator {
 }
 
 #[derive(Clone)]
-pub(crate) struct RenderSeeds {
+pub struct RenderSeeds {
     pub ss1: f64,
     pub ss2: f64,
     pub ss3: f64,

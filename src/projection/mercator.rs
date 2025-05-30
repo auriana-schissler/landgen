@@ -38,7 +38,7 @@ impl Mercator {
 
     fn get_y(&self, h: usize) -> f64 {
         let real_h = self.slicing.get_absolute_height(self.slice_id, h);
-        let mut y =
+        let mut y = 
             (2 * (real_h as i32 - self.k) - self.i_height) as f64 * 2. * PI / self.scaled_width;
         y = y.exp();
         (y - 1.) / (y + 1.)

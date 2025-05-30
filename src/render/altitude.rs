@@ -23,7 +23,7 @@ pub fn calc_altitude(state: &mut ThreadState, p: &Vertex) -> f64 {
     let mut e = Vertex::new();
 
     while subdivision_depth > 0 {
-        /* make sure ab is longest edge */
+        /* make sure ab is the longest edge */
         let mut lab = distance_squared(&tetra.a, &tetra.b);
         let lac = distance_squared(&tetra.a, &tetra.c);
         let lad = distance_squared(&tetra.a, &tetra.d);

@@ -19,4 +19,4 @@ impl GridLines {
 }
 
 // TODO: Generate lat/long grid lines
-pub fn generate_gridlines(state: Arc<RenderState>) {}
+pub fn generate_gridlines(_state: Arc<RenderState>) {}
