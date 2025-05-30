@@ -1,4 +1,4 @@
-use crate::get_commandline_footer;
+use crate::args::get_commandline_footer;
 use crate::render::RenderState;
 use mtpng::encoder::{Encoder, Options};
 use mtpng::{ColorType, CompressionLevel, Header};
@@ -18,7 +18,7 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
     header.set_color(ColorType::Truecolor, 8)?;
 
     let mut options = Options::new();
-    options.set_compression_level(CompressionLevel::Default)?;
+    options.set_compression_level(CompressionLevel::High)?;
     options.set_streaming(true)?;
 
     let mut encoder = Encoder::new(writer, &options);
@@ -28,10 +28,9 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
 
     let canvas = state.canvas.read().unwrap();
     
-    let height = state.options.slicing.height;
     let width = state.options.slicing.width;
-    let mut line: Vec<u8> = Vec::with_capacity(height * width * 3);
     for v in canvas.iter() {
+        let mut line: Vec<u8> = Vec::with_capacity(v.len() * width * 3);
         for h in v.iter() {
             for w in h.iter() {
                 let color_index = *w as usize;
@@ -41,8 +40,8 @@ pub(super) fn write_to<W: Write>(state: Arc<RenderState>, writer: &mut W) -> Res
                 line.push(color.blue);
             }
         }
+        encoder.write_image_rows(&line)?;
     }
-    encoder.write_image_rows(&line)?;
     //encoder.write_chunk(b"CMDL", cmdline.as_bytes())?;
     encoder.finish()?;
     Ok(())

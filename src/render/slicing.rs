@@ -22,7 +22,7 @@ impl Slicing {
     }
 
     #[inline(always)]
-    pub fn translate_index(&self, h0: usize) -> (usize, usize) {
+    pub fn translate_height_index(&self, h0: usize) -> (usize, usize) {
         (h0 / self.slice_height, h0 % self.slice_height)
     }
 

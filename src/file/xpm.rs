@@ -1,5 +1,5 @@
 use crate::color::Color;
-use crate::get_commandline_footer;
+use crate::args::get_commandline_footer;
 use crate::render::RenderState;
 use std::io;
 use std::io::Write;

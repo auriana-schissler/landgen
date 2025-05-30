@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 // S = savanna, F = temperate forest, R = temperate rainforest,
 // W = Xeric shrubland and dry forest, E = tropical dry forest,
 // O = tropical rainforest, I = icecap
-pub static biomes: LazyLock<[[u8; 45]; 45]> = LazyLock::new(|| {
+pub static BIOMES: LazyLock<[[u8; 45]; 45]> = LazyLock::new(|| {
     [
         b"IIITTTTTGGGGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDD".to_owned(),
         b"IIITTTTTGGGGGGGGDDDDGGDSDDSDDDDDDDDDDDDDDDDDD".to_owned(),

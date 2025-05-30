@@ -1,6 +1,6 @@
 use crate::util::unwrap_or_return;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::ops::{Index, IndexMut};
 
 #[derive(Clone, Debug)]
@@ -14,8 +14,8 @@ pub struct ColorTable {
     pub outline2: u16,
     pub sea_bottom: u16,
     pub sea_level: u16,
-    pub lowest_land: u16,
-    pub highest_land: u16,
+    pub coastline: u16,
+    pub land_peak: u16,
     pub sea_depth: u16,
     pub land_height: u16,
 }
@@ -32,10 +32,10 @@ impl ColorTable {
             outline2: 5,
             sea_bottom: 6,
             sea_level: 7,
-            lowest_land: 8,
-            highest_land: 9,
+            coastline: 8,
+            land_peak: 9,
             sea_depth: 0,
-            land_height: 0
+            land_height: 0,
         }
     }
 
@@ -67,6 +67,8 @@ impl ColorTable {
     pub fn len(&self) -> usize {
         self.rows.len()
     }
+
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
 }
 
 impl Index<usize> for ColorTable {
@@ -83,7 +85,7 @@ impl IndexMut<usize> for ColorTable {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Color {
     pub red: u8,
     pub green: u8,
@@ -92,7 +94,7 @@ pub struct Color {
 
 impl Color {
     pub fn new() -> Self {
-        Self::from_colors(0, 0, 0)
+        Self::default()
     }
 
     pub fn from_colors(r: u8, g: u8, b: u8) -> Self {
@@ -131,12 +133,11 @@ const E: usize = 'E' as usize - 64;
 const O: usize = 'O' as usize - 64;
 const I: usize = 'I' as usize - 64;
 
-// TODO: use include_str!() to embed color data into the program in build script
 pub fn build_color_data(color_filename: &str, show_biomes: bool) -> ColorTable {
-    let mut table = generate_color_data(color_filename);
+    let mut table = generate_color_data_from_file(color_filename);
 
     if show_biomes {
-        let lowest_land = table.lowest_land as usize;
+        let lowest_land = table.coastline as usize;
         table[T + lowest_land] = Color::from_colors(210, 210, 210);
         table[G + lowest_land] = Color::from_colors(250, 215, 165);
         table[B + lowest_land] = Color::from_colors(105, 155, 120);
@@ -207,9 +208,18 @@ fn test_negative_color_step_calc() {
 // With 65536 colours, (max+6)/2 = 32770
 // Colours between specified are interpolated
 
-/// Reads color rows from the specified file and interpolates color data where needed
-fn generate_color_data(filename: &str) -> ColorTable {
+fn generate_color_data_from_file(filename: &str) -> ColorTable {
     let color_rows = read_color_file(filename);
+    generate_color_data(color_rows)
+}
+
+pub fn generate_color_data_from_string(data_string: &str) -> ColorTable {
+    let color_rows = read_color_data_string(data_string);
+    generate_color_data(color_rows)
+}
+
+/// Reads color rows from the specified file and interpolates color data where needed
+fn generate_color_data(color_rows: Vec<ColorRow>) -> ColorTable {
     validate_color_file(&color_rows);
     let max_index = color_rows.iter().map(|x| x.index).max().unwrap_or(0);
     let mut table = ColorTable::new(max_index + 1);
@@ -244,36 +254,44 @@ fn generate_color_data(filename: &str) -> ColorTable {
     let sea_level = (low_point + highest_land) / 2;
     let lowest_land = sea_level + 1;
 
-    table.highest_land = highest_land as u16;
+    table.land_peak = highest_land as u16;
     table.sea_level = sea_level as u16;
-    table.lowest_land = lowest_land as u16;
+    table.coastline = lowest_land as u16;
 
     table.sea_depth = table.sea_level - table.sea_bottom;
-    table.land_height = table.highest_land - table.lowest_land;
+    table.land_height = table.land_peak - table.coastline;
     table
 }
 
 fn read_color_file(filename: &str) -> Vec<ColorRow> {
     match File::open(filename) {
         Ok(file) => {
-            let reader = BufReader::new(file);
-            reader
-                .lines()
-                .map(|x| x.unwrap_or("".into()))
-                .filter(|x| !x.trim().is_empty())
-                .map(|x| {
-                    get_color_line_values(x).unwrap_or_else(|e| {
-                        eprintln!("Error parsing color file with error {:?}", e);
-                        panic!()
-                    })
-                })
-                .collect::<Vec<ColorRow>>()
+            read_color_data(file)
         }
         Err(e) => {
             eprintln!("Error reading color file! {:?}", e);
             panic!()
         }
     }
+}
+
+fn read_color_data_string(color_data_string: &str) -> Vec<ColorRow> {
+    read_color_data(color_data_string.as_bytes())
+}
+
+fn read_color_data(color_data: impl Read) -> Vec<ColorRow> {
+    let reader = BufReader::new(color_data);
+    reader
+        .lines()
+        .map(|x| x.unwrap_or("".into()))
+        .filter(|x| !x.trim().is_empty())
+        .map(|x| {
+            get_color_line_values(x).unwrap_or_else(|e| {
+                eprintln!("Error parsing color file with error {:?}", e);
+                panic!()
+            })
+        })
+        .collect::<Vec<ColorRow>>()
 }
 
 fn validate_color_file(rows: &[ColorRow]) {
@@ -314,7 +332,7 @@ fn get_color_line_values(line: String) -> Result<ColorRow, ColorFileParseError> 
                 tokens[0].parse::<usize>(),
                 Err(ColorFileParseError::IndexParse)
             )
-            .min(u16::MAX as usize),
+                .min(u16::MAX as usize),
             unwrap_or_return!(tokens[1].parse(), Err(ColorFileParseError::ColorParse)),
             unwrap_or_return!(tokens[2].parse(), Err(ColorFileParseError::ColorParse)),
             unwrap_or_return!(tokens[3].parse(), Err(ColorFileParseError::ColorParse)),
@@ -346,9 +364,9 @@ fn test_color_file_interpolation() {
 
     let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
     filepath.push_str("\\src\\color_files\\greyscale.col");
-    let table = generate_color_data(&filepath);
+    let table = generate_color_data_from_file(&filepath);
 
-    assert_eq!(table.highest_land, 261);
+    assert_eq!(table.land_peak, 261);
     assert_eq!(table.len(), 262);
 
     for i in 6..=261 {
@@ -362,9 +380,9 @@ fn test_specific_color_file_interpolation() {
 
     let mut filepath = env::var("CARGO_MANIFEST_DIR").unwrap();
     filepath.push_str("\\src\\color_files\\olsson.col");
-    let table = generate_color_data(&filepath);
+    let table = generate_color_data_from_file(&filepath);
 
-    assert_eq!(table.highest_land, 66);
+    assert_eq!(table.land_peak, 66);
     assert_eq!(table.len(), 67);
 
     assert_eq!(table[49].red, 238);

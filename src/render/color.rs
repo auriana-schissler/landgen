@@ -1,7 +1,7 @@
 use crate::geometry::Vertex;
 use crate::render::altitude::calc_altitude;
 use crate::render::ThreadState;
-use crate::terrain::biomes;
+use crate::terrain::BIOMES;
 
 // planet0()
 pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, h: usize, w: usize) {
@@ -53,19 +53,19 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, h: usize, w: usi
     let color = if options.show_biomes {
         let tt = ((rain * 300.0 - 9.0) as i32).clamp(0, 44) as u8;
         let rr = ((temp * 300.0 + 10.0) as i32).clamp(0, 44) as u8;
-        let bio = biomes[tt as usize][rr as usize] as u16;
+        let bio = BIOMES[tt as usize][rr as usize] as u16;
         if alt <= 0.0 {
             let depth_level = (-10. * alt).min(1.);
             let c = (color_table.sea_depth as f64 * depth_level) as u16;
             color_table.sea_level - c
         } else {
-            bio - 64 + color_table.lowest_land // from LAND+2 to LAND+23
+            bio - 64 + color_table.coastline // from LAND+2 to LAND+23
         }
     } else if alt <= 0. {
         // if below sea level then
         let lci = options.latitude_color_intensity as f64;
         if options.use_latitude_coloring && (y2 + alt) >= (1.0 - 0.02 * lci * lci) {
-            color_table.highest_land // icecap if close to poles
+            color_table.land_peak // icecap if close to poles
         } else {
             let depth_level = (-10. * alt).min(1.);
             let c = (color_table.sea_depth as f64 * depth_level) as u16;
@@ -77,11 +77,11 @@ pub fn render_pixel(thread_state: &mut ThreadState, p: &Vertex, h: usize, w: usi
         }
         if alt >= 0.1 {
             // if high then
-            color_table.highest_land
+            color_table.land_peak
         } else {
             let altitude = (10.0 * alt).min(1.);
             let c = color_table.land_height as f64 * altitude;
-            color_table.lowest_land + c as u16
+            color_table.coastline + c as u16
         }
     };
 

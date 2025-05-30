@@ -1,8 +1,11 @@
-use crate::color::{build_color_data, ColorTable};
+use crate::args::Args;
+use crate::color::{ColorTable, build_color_data};
+use crate::color_files::COLOR_TABLES;
 use crate::file::bitmap::validate_size;
-use crate::file::{write_file, ColorMode, FileType};
+use crate::file::{ColorMode, FileType};
 use crate::geometry::Tetra;
 use crate::math::{RenderSeeds, SeedGenerator};
+use crate::projection::ProjectionMode;
 use crate::projection::azimuthal::Azimuthal;
 use crate::projection::conical::Conical;
 use crate::projection::gnomonic::Gnomonic;
@@ -14,11 +17,9 @@ use crate::projection::peters::Peters;
 use crate::projection::sinusoidal::Sinusoidal;
 use crate::projection::square::Square;
 use crate::projection::stereographic::Stereographic;
-use crate::projection::ProjectionMode;
 use crate::render::color::render_pixel;
 use crate::terrain::LatLong;
 use crate::util::Vec2D;
-use crate::Args;
 use chrono::Utc;
 use gridlines::GridLines;
 use slicing::Slicing;
@@ -42,12 +43,11 @@ pub struct RenderOptions {
     pub filetypes: Vec<FileType>,
     pub generate_heightfield: bool,
     pub center_point: LatLong,
-    pub gridsize: LatLong,
+    pub grid_size: LatLong,
     pub initial_altitude: f64,
     pub altitude_color: u8,
     pub use_nonlinear_altitude_scaling: bool,
     pub make_wrinkly_map: bool,
-    pub color_filename: String,
     pub draw_outline_map: bool,
     pub draw_coastline: bool,
     pub land_contour_lines: u16,
@@ -114,12 +114,22 @@ impl Args {
 
         let seed_gen = SeedGenerator::new(&self.precision);
 
+        let color_table = if self.color_filename.is_empty() {
+            if COLOR_TABLES.contains_key(self.color_pallet_name.as_str()) {
+                COLOR_TABLES[self.color_pallet_name.as_str()].clone()
+            } else {
+                panic!("")
+            }
+        } else {
+            build_color_data(&self.color_filename, self.show_biomes)
+        };
+
         RenderOptions {
             seeds: seed_gen.generate(self.seed),
             seed_gen,
             slicing: Slicing::new(self.height, self.width, self.render_threads),
             scale: self.magnification.clamp(0.1, 100_000.0),
-            color_table: build_color_data(&self.color_filename, self.show_biomes),
+            color_table,
             output_file: self.output_file.clone(),
             filetypes: RenderOptions::get_filetypes(&self),
             generate_heightfield: self.use_heightfield_format,
@@ -127,12 +137,11 @@ impl Args {
                 self.latitude.to_radians(),
                 self.longitude.to_radians(),
             ),
-            gridsize: LatLong::new(self.latitude_gridsize, self.longitude_gridsize),
+            grid_size: LatLong::new(self.latitude_grid_size, self.longitude_grid_size),
             initial_altitude: self.initial_altitude,
             altitude_color: self.latitude_color,
             use_nonlinear_altitude_scaling: self.use_nonlinear_altitude_scaling,
             make_wrinkly_map: self.make_wrinkly_map,
-            color_filename: self.color_filename.clone(),
             draw_outline_map: self.draw_outline_map,
             draw_coastline: self.draw_coastline,
             land_contour_lines: self.land_contour_lines,
@@ -178,9 +187,9 @@ impl Args {
             latitude_color_intensity: self.latitude_color,
             shading_level: if self.draw_daylight {
                 3
-            } else if self.use_land_only_bumpmap {
+            } else if self.use_land_only_bump_map {
                 2
-            } else if self.use_bumpmap {
+            } else if self.use_bump_map {
                 1
             } else {
                 0
@@ -289,7 +298,7 @@ fn gen_shading(id: u8, options: &RenderOptions) -> Vec2D<u8> {
     }
 }
 
-pub fn execute(args: Args) {
+pub fn render_map(args: Args) -> Arc<RenderState> {
     let options = args.into_options();
     let state = Arc::new(RenderState::new(options.clone()));
 
@@ -373,10 +382,10 @@ pub fn execute(args: Args) {
     gridlines::generate_gridlines(state.clone());
 
     smooth_shading(state.clone());
-
-    let _ = write_file(state.clone());
-    let time = (Utc::now() - now).num_seconds();
-    println!("Render completed in {time} seconds");
+    let time = (Utc::now() - now).num_milliseconds() as f64 / 1000.0;
+    println!("Render completed in {time:.2} seconds");
+    
+    state.clone()
 }
 
 pub fn commit_render_data(
@@ -406,63 +415,112 @@ pub fn commit_render_data(
 }
 
 // TODO: Generate contour lines and outlines
-fn generate_outlines(state: Arc<RenderState>) {
-    let sea_bottom = state.options.color_table.sea_bottom;
-    let sea_level = state.options.color_table.sea_level;
-    let lowest_land = state.options.color_table.lowest_land;
-    let highest_land = state.options.color_table.highest_land;
-
-    let land_contour_step = (highest_land - lowest_land) / (state.options.land_contour_lines + 1);
-    let water_contour_step = (lowest_land - sea_bottom) / 20;
-
-    let canvas = state.canvas.write().unwrap();
-
-    // for h in 1..state.options.height as usize {
-    //     for w in 1..state.options.width as usize {
-    //         //let point = canvas
-    //         // detect line for beaches
-    //
-    //         if state.options.land_contour_lines > 0 {
-    //             // detect land lines
-    //         }
-    //
-    //         if state.options.water_contour_lines > 0 {
-    //             // detect water lines
-    //         }
-    //
-    //         if state.options.draw_outline_map {}
-    //     }
-    // }
-    //
-    // for h in 0..state.options.height as usize {
-    //     for w in 0..state.options.width as usize {
-    //         // wipe colors
-    //     }
-    // }
-
-    // Apply outlines to canvas
-}
+// fn generate_outlines(state: Arc<RenderState>) {
+//     let sea_bottom = state.options.color_table.sea_bottom;
+//     let sea_level = state.options.color_table.sea_level;
+//     let lowest_land = state.options.color_table.coastline;
+//     let highest_land = state.options.color_table.land_peak;
+//
+//     let land_contour_step = (highest_land - lowest_land) / (state.options.land_contour_lines + 1);
+//     let water_contour_step = (lowest_land - sea_bottom) / 20;
+//
+//     let canvas = state.canvas.write().unwrap();
+//
+//     // for h in 1..state.options.height as usize {
+//     //     for w in 1..state.options.width as usize {
+//     //         //let point = canvas
+//     //         // detect line for beaches
+//     //
+//     //         if state.options.land_contour_lines > 0 {
+//     //             // detect land lines
+//     //         }
+//     //
+//     //         if state.options.water_contour_lines > 0 {
+//     //             // detect water lines
+//     //         }
+//     //
+//     //         if state.options.draw_outline_map {}
+//     //     }
+//     // }
+//     //
+//     // for h in 0..state.options.height as usize {
+//     //     for w in 0..state.options.width as usize {
+//     //         // wipe colors
+//     //     }
+//     // }
+//
+//     // Apply outlines to canvas
+// }
 
 // TODO: Eventually add in map reading (from file or stdin)
-fn read_map() {}
+//fn read_map() {}
 
 fn smooth_shading(state: Arc<RenderState>) {
     let mut shading = state.shading.write().unwrap();
-    if shading.len() == 0 {
+    if shading.is_empty() {
         return;
     }
     let height_limit = state.options.slicing.height - 1;
     let width_limit = state.options.slicing.width - 1;
 
     for ahi in 0..height_limit {
-        let (vi, hi) = state.options.slicing.translate_index(ahi);
+        let (vi, hi) = state.options.slicing.translate_height_index(ahi);
         for wi in 0..width_limit {
             let p = 4 * shading[vi][hi][wi] as u16;
             let w1 = 2 * shading[vi][hi][wi + 1] as u16;
-            let (vi1, hi1) = state.options.slicing.translate_index(ahi + 1);
+            let (vi1, hi1) = state.options.slicing.translate_height_index(ahi + 1);
             let h1 = 2 * shading[vi1][hi1][wi] as u16;
             let hw1 = shading[vi1][hi1][wi + 1] as u16;
             shading[vi][hi][wi] = ((p + h1 + w1 + hw1 + 4) / 9).min(255) as u8;
         }
     }
+}
+
+#[test]
+fn full_test_run() {
+    let args = Args {
+        height: 1000,
+        width: 1000,
+        projection: "m".into(),
+        precision: "oooo".into(),
+        longitude: -130.,
+        latitude: 0.,
+        magnification: 1.,
+        color_filename: "".into(),
+        color_pallet_name: "olsson".into(),
+        seed: 0.7609952,
+        output_file: Some("./test_output".to_string()),
+        draw_daylight: false,
+        calculate_rainfall: false,
+        latitude_color: 0,
+        show_biomes: false,
+        use_xpm_format: false,
+        use_ppm_format: false,
+        use_heightfield_format: false,
+        use_png_format: true,
+        use_bmp_format: false,
+        map_rotation: vec![0., 0.],
+        altitude_variation: 0.45,
+        use_delta_map: None,
+        distance_variation: 0.035,
+        light_longitude: 0.,
+        light_latitude: 0.,
+        draw_coastline: false,
+        draw_outline_map: false,
+        land_contour_lines: 2,
+        water_contour_lines: 2,
+        make_wrinkly_map: false,
+        initial_altitude: -0.02,
+        longitude_grid_size: 0.,
+        latitude_grid_size: 0.,
+        use_temperature: false,
+        use_bump_map: false,
+        use_land_only_bump_map: false,
+        use_nonlinear_altitude_scaling: false,
+        help: None,
+        version: None,
+        render_threads: 8,
+    };
+
+    let state = render_map(args);
 }
